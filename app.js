@@ -432,11 +432,11 @@ function app() {
 
                 this.newMessage = '';
                 await this.fetchMessages();
-                this.focusInput();
             } catch (err) {
                 console.error(err);
             } finally {
                 this.sending = false;
+                this.$nextTick(() => this.focusInput());
             }
         },
 
