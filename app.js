@@ -15,13 +15,20 @@ function app() {
             deviceName: ''
         },
         channels: [],
+        channelsLoading: false,
         selectedChannel: 'Public',
         selectedChannelIndex: 0,
         messages: [],
         messagesLoading: false,
+        lastMessageTimestamp: null,
+        pollerInterval: null,
         newMessage: '',
         sending: false,
         darkMode: false,
+        currentPage: 'messages',
+        repeaters: [],
+        repeatersLoading: false,
+        repeaterCharts: {},
 
         async init() {
             this.loadTheme();
@@ -35,8 +42,10 @@ function app() {
                 const valid = await this.verifyToken();
                 if (valid) {
                     this.view = 'dashboard';
+                    await this.fetchChannels();
                     this.loadChannelFromUrl();
                     await this.fetchMessages();
+                    this.startPoller();
                     this.$nextTick(() => this.focusInput());
                 } else {
                     this.clearSession();
@@ -68,6 +77,9 @@ function app() {
             this.darkMode = !this.darkMode;
             localStorage.setItem('darkMode', this.darkMode);
             this.applyTheme();
+            if (this.currentPage === 'telemetry' && this.repeaters.length > 0) {
+                this.$nextTick(() => this.renderCharts());
+            }
         },
 
         loadChannelFromUrl() {
@@ -118,6 +130,7 @@ function app() {
                 await this.fetchChannels();
                 this.loadChannelFromUrl();
                 await this.fetchMessages();
+                this.startPoller();
                 this.$nextTick(() => this.focusInput());
             } catch (err) {
                 this.error = err.message;
@@ -132,8 +145,9 @@ function app() {
 
             try {
                 const response = await fetch(`${API_BASE}/status`, {
-                    headers: { 'x-api-key': token }
+                    headers: { 'x-api-token': token }
                 });
+                if (!response.ok) return false;
                 const data = await response.json();
                 return data.authenticated === true;
             } catch {
@@ -142,17 +156,167 @@ function app() {
         },
 
         async fetchChannels() {
+            this.channelsLoading = true;
             const token = localStorage.getItem('api_token');
-            const response = await fetch(`${API_BASE}/api/channels`, {
-                headers: { 'x-api-token': token }
-            });
+            try {
+                const response = await fetch(`${API_BASE}/api/channels`, {
+                    headers: { 'x-api-token': token }
+                });
 
-            if (!response.ok) {
-                throw new Error('Failed to fetch channels');
+                if (response.status === 401) {
+                    this.handleUnauthorized();
+                    return;
+                }
+
+                if (!response.ok) {
+                    throw new Error('Failed to fetch channels');
+                }
+
+                const data = await response.json();
+                this.channels = data.channels || [];
+            } finally {
+                this.channelsLoading = false;
             }
+        },
 
-            const data = await response.json();
-            this.channels = data.channels || [];
+        async fetchRepeaters() {
+            this.repeatersLoading = true;
+            const token = localStorage.getItem('api_token');
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/repeaters`, {
+                    headers: { 'x-api-token': token }
+                });
+
+                if (response.status === 401) {
+                    this.handleUnauthorized();
+                    return;
+                }
+
+                if (!response.ok) {
+                    throw new Error('Failed to fetch repeaters');
+                }
+
+                const data = await response.json();
+                this.repeaters = (data.repeaters || []).map(r => ({
+                    ...r,
+                    batteryHistory: this.generateBatteryHistory(),
+                    currentBattery: 0
+                }));
+                this.repeaters.forEach(r => {
+                    r.currentBattery = r.batteryHistory[r.batteryHistory.length - 1];
+                });
+                this.$nextTick(() => this.renderCharts());
+            } catch (err) {
+                console.error(err);
+            } finally {
+                this.repeatersLoading = false;
+            }
+        },
+
+        generateBatteryHistory() {
+            const points = 24;
+            const history = [];
+            let battery = 75 + Math.random() * 20;
+            
+            for (let i = 0; i < points; i++) {
+                const cyclePhase = (i / points) * 2 * Math.PI;
+                const discharge = Math.sin(cyclePhase) * 25;
+                const noise = (Math.random() - 0.5) * 5;
+                battery = Math.max(10, Math.min(100, 70 + discharge + noise));
+                history.push(parseFloat(battery.toFixed(1)));
+            }
+            return history;
+        },
+
+        renderCharts() {
+            this.destroyCharts();
+            const isDark = this.darkMode;
+            const gridColor = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)';
+            const textColor = isDark ? '#9ca3af' : '#6b7280';
+
+            this.repeaters.forEach(repeater => {
+                const canvas = document.getElementById(`chart-${repeater.id}`);
+                if (!canvas) return;
+
+                const ctx = canvas.getContext('2d');
+                this.repeaterCharts[repeater.id] = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: this.generateTimeLabels(),
+                        datasets: [{
+                            data: repeater.batteryHistory,
+                            borderColor: '#6366f1',
+                            backgroundColor: 'rgba(99, 102, 241, 0.1)',
+                            fill: true,
+                            tension: 0.4,
+                            pointRadius: 0,
+                            borderWidth: 2
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: {
+                                callbacks: {
+                                    label: (ctx) => `${ctx.parsed.y.toFixed(1)}%`
+                                }
+                            }
+                        },
+                        scales: {
+                            x: {
+                                display: true,
+                                grid: { display: false },
+                                ticks: { 
+                                    color: textColor,
+                                    font: { size: 10 },
+                                    maxTicksLimit: 6
+                                }
+                            },
+                            y: {
+                                display: true,
+                                min: 0,
+                                max: 100,
+                                grid: { color: gridColor },
+                                ticks: { 
+                                    color: textColor,
+                                    font: { size: 10 },
+                                    callback: (v) => v + '%',
+                                    maxTicksLimit: 4
+                                }
+                            }
+                        }
+                    }
+                });
+            });
+        },
+
+        generateTimeLabels() {
+            const labels = [];
+            const now = new Date();
+            for (let i = 23; i >= 0; i--) {
+                const time = new Date(now - i * 3600000);
+                labels.push(time.getHours().toString().padStart(2, '0') + ':00');
+            }
+            return labels;
+        },
+
+        destroyCharts() {
+            Object.values(this.repeaterCharts).forEach(chart => chart?.destroy());
+            this.repeaterCharts = {};
+        },
+
+        switchPage(page) {
+            this.currentPage = page;
+            if (page === 'telemetry' && this.repeaters.length === 0) {
+                this.fetchRepeaters();
+            } else if (page === 'telemetry' && this.repeaters.length > 0) {
+                this.$nextTick(() => this.renderCharts());
+            } else if (page === 'messages') {
+                this.destroyCharts();
+            }
         },
 
         async fetchMessages() {
@@ -165,18 +329,76 @@ function app() {
                     { headers: { 'x-api-token': token } }
                 );
 
+                if (response.status === 401) {
+                    this.handleUnauthorized();
+                    return;
+                }
+
                 if (!response.ok) {
                     throw new Error('Failed to fetch messages');
                 }
 
                 const data = await response.json();
                 this.messages = data.messages || [];
+                if (this.messages.length > 0) {
+                    this.lastMessageTimestamp = this.messages[this.messages.length - 1].ts;
+                }
                 this.$nextTick(() => this.scrollToBottom());
             } catch (err) {
                 console.error(err);
             } finally {
                 this.messagesLoading = false;
             }
+        },
+
+        startPoller() {
+            this.stopPoller();
+            this.pollerInterval = setInterval(() => this.pollNewMessages(), 2000);
+        },
+
+        stopPoller() {
+            if (this.pollerInterval) {
+                clearInterval(this.pollerInterval);
+                this.pollerInterval = null;
+            }
+        },
+
+        async pollNewMessages() {
+            if (!this.lastMessageTimestamp) return;
+            
+            const token = localStorage.getItem('api_token');
+            
+            try {
+                const response = await fetch(
+                    `${API_BASE}/api/messages?channel=${encodeURIComponent(this.selectedChannel)}&since=${encodeURIComponent(this.lastMessageTimestamp)}&order=asc`,
+                    { headers: { 'x-api-token': token } }
+                );
+
+                if (response.status === 401) {
+                    this.handleUnauthorized();
+                    return;
+                }
+
+                if (!response.ok) return;
+
+                const data = await response.json();
+                const newMessages = (data.messages || []).filter(msg => msg.ts > this.lastMessageTimestamp);
+                
+                if (newMessages.length > 0) {
+                    this.messages = [...this.messages, ...newMessages];
+                    this.lastMessageTimestamp = newMessages[newMessages.length - 1].ts;
+                    this.$nextTick(() => this.scrollToBottom());
+                }
+            } catch (err) {
+                console.error(err);
+            }
+        },
+
+        handleUnauthorized() {
+            this.stopPoller();
+            this.destroyCharts();
+            this.clearSession();
+            this.view = 'login';
         },
 
         async sendMessage() {
@@ -198,6 +420,11 @@ function app() {
                     })
                 });
 
+                if (response.status === 401) {
+                    this.handleUnauthorized();
+                    return;
+                }
+
                 if (!response.ok) {
                     throw new Error('Failed to send message');
                 }
@@ -216,6 +443,7 @@ function app() {
             this.selectedChannelIndex = index;
             this.selectedChannel = name;
             this.messages = [];
+            this.lastMessageTimestamp = null;
             this.updateUrl();
             this.fetchMessages();
             this.focusInput();
@@ -248,6 +476,8 @@ function app() {
         },
 
         logout() {
+            this.stopPoller();
+            this.destroyCharts();
             this.clearSession();
             this.view = 'login';
         },
@@ -258,6 +488,7 @@ function app() {
             this.user = { email: '', username: '', deviceName: '' };
             this.channels = [];
             this.messages = [];
+            this.lastMessageTimestamp = null;
             window.location.hash = '';
         }
     };
