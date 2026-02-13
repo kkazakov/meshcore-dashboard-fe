@@ -200,12 +200,11 @@ function app() {
                 const data = await response.json();
                 this.repeaters = (data.repeaters || []).map(r => ({
                     ...r,
-                    batteryHistory: this.generateBatteryHistory(),
-                    currentBattery: 0
+                    telemetry: null,
+                    currentBattery: null
                 }));
-                this.repeaters.forEach(r => {
-                    r.currentBattery = r.batteryHistory[r.batteryHistory.length - 1];
-                });
+                
+                await Promise.all(this.repeaters.map(r => this.fetchRepeaterTelemetry(r)));
                 this.$nextTick(() => this.renderCharts());
             } catch (err) {
                 console.error(err);
@@ -214,19 +213,86 @@ function app() {
             }
         },
 
-        generateBatteryHistory() {
-            const points = 24;
-            const history = [];
-            let battery = 75 + Math.random() * 20;
+        async fetchRepeaterTelemetry(repeater) {
+            const token = localStorage.getItem('api_token');
+            const to = new Date();
+            const from = new Date(to.getTime() - 24 * 60 * 60 * 1000);
             
-            for (let i = 0; i < points; i++) {
-                const cyclePhase = (i / points) * 2 * Math.PI;
-                const discharge = Math.sin(cyclePhase) * 25;
-                const noise = (Math.random() - 0.5) * 5;
-                battery = Math.max(10, Math.min(100, 70 + discharge + noise));
-                history.push(parseFloat(battery.toFixed(1)));
+            const formatDate = (d) => d.toISOString().replace('T', ' ').substring(0, 19);
+            
+            try {
+                const response = await fetch(
+                    `${API_BASE}/api/telemetry/history/${repeater.id}?from=${encodeURIComponent(formatDate(from))}&to=${encodeURIComponent(formatDate(to))}&keys=battery_voltage,battery_percentage`,
+                    { headers: { 'x-api-token': token } }
+                );
+
+                if (response.status === 401) {
+                    this.handleUnauthorized();
+                    return;
+                }
+
+                if (!response.ok) return;
+
+                const data = await response.json();
+                const telemetry = this.processTelemetryData(data);
+                const lastPct = telemetry.percentage.filter(v => v != null).pop();
+                const idx = this.repeaters.findIndex(r => r.id === repeater.id);
+                if (idx !== -1) {
+                    this.repeaters[idx] = {
+                        ...this.repeaters[idx],
+                        telemetry: telemetry,
+                        currentBattery: lastPct != null ? lastPct : null
+                    };
+                }
+            } catch (err) {
+                console.error('Error fetching telemetry for', repeater.name, err);
             }
-            return history;
+        },
+
+        processTelemetryData(data) {
+            const voltageRecords = data.data?.battery_voltage || [];
+            const percentageRecords = data.data?.battery_percentage || [];
+            
+            const allTimes = new Set();
+            percentageRecords.forEach(r => allTimes.add(r.date));
+            voltageRecords.forEach(r => allTimes.add(r.date));
+            
+            const sortedTimes = Array.from(allTimes).sort();
+            
+            const maxPoints = 50;
+            const step = Math.max(1, Math.floor(sortedTimes.length / maxPoints));
+            
+            const percentageMap = new Map(percentageRecords.map(r => [r.date, parseFloat(r.value)]));
+            const voltageMap = new Map(voltageRecords.map(r => [r.date, parseFloat(r.value)]));
+            
+            const percentage = [];
+            const voltage = [];
+            const labels = [];
+            
+            for (let i = 0; i < sortedTimes.length; i += step) {
+                const time = sortedTimes[i];
+                labels.push(this.formatTelemetryTime(time));
+                
+                const pct = percentageMap.get(time);
+                percentage.push(pct != null ? pct : null);
+                
+                const volt = voltageMap.get(time);
+                voltage.push(volt != null ? volt : null);
+            }
+            
+            return { percentage, voltage, labels };
+        },
+
+        formatTelemetryTime(ts) {
+            const d = new Date(ts);
+            return d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0');
+        },
+
+        getBatteryClass(battery) {
+            if (battery == null) return 'text-gray-500 dark:text-gray-400';
+            if (battery > 50) return 'text-green-600 dark:text-green-400';
+            if (battery > 20) return 'text-yellow-600 dark:text-yellow-400';
+            return 'text-red-600 dark:text-red-400';
         },
 
         renderCharts() {
@@ -237,31 +303,78 @@ function app() {
 
             this.repeaters.forEach(repeater => {
                 const canvas = document.getElementById(`chart-${repeater.id}`);
-                if (!canvas) return;
+                if (!canvas || !repeater.telemetry || repeater.telemetry.labels.length === 0) return;
 
                 const ctx = canvas.getContext('2d');
+                const telemetry = repeater.telemetry;
+                
+                const pctValues = telemetry.percentage;
+                const voltValues = telemetry.voltage;
+                
+                const datasets = [];
+                
+                const hasPct = pctValues.some(v => v != null);
+                const hasVolt = voltValues.some(v => v != null);
+                
+                if (hasPct) {
+                    const pctGradient = ctx.createLinearGradient(0, 0, 0, 160);
+                    pctGradient.addColorStop(0, 'rgba(34, 197, 94, 0.3)');
+                    pctGradient.addColorStop(0.5, 'rgba(234, 179, 8, 0.3)');
+                    pctGradient.addColorStop(1, 'rgba(239, 68, 68, 0.3)');
+                    
+                    datasets.push({
+                        label: 'Battery %',
+                        data: pctValues,
+                        borderColor: '#22c55e',
+                        backgroundColor: pctGradient,
+                        fill: true,
+                        tension: 0.4,
+                        pointRadius: 0,
+                        borderWidth: 2,
+                        yAxisID: 'y',
+                        spanGaps: true
+                    });
+                }
+                
+                if (hasVolt) {
+                    datasets.push({
+                        label: 'Voltage',
+                        data: voltValues,
+                        borderColor: '#3b82f6',
+                        backgroundColor: 'transparent',
+                        fill: false,
+                        tension: 0.4,
+                        pointRadius: 0,
+                        borderWidth: 2,
+                        yAxisID: 'y1',
+                        borderDash: [5, 5],
+                        spanGaps: true
+                    });
+                }
+
                 this.repeaterCharts[repeater.id] = new Chart(ctx, {
                     type: 'line',
                     data: {
-                        labels: this.generateTimeLabels(),
-                        datasets: [{
-                            data: repeater.batteryHistory,
-                            borderColor: '#6366f1',
-                            backgroundColor: 'rgba(99, 102, 241, 0.1)',
-                            fill: true,
-                            tension: 0.4,
-                            pointRadius: 0,
-                            borderWidth: 2
-                        }]
+                        labels: telemetry.labels,
+                        datasets
                     },
                     options: {
                         responsive: true,
                         maintainAspectRatio: false,
+                        interaction: {
+                            mode: 'index',
+                            intersect: false
+                        },
                         plugins: {
                             legend: { display: false },
                             tooltip: {
                                 callbacks: {
-                                    label: (ctx) => `${ctx.parsed.y.toFixed(1)}%`
+                                    label: (ctx) => {
+                                        if (ctx.dataset.label === 'Battery %') {
+                                            return `Battery: ${ctx.parsed.y.toFixed(1)}%`;
+                                        }
+                                        return `Voltage: ${ctx.parsed.y.toFixed(2)}V`;
+                                    }
                                 }
                             }
                         },
@@ -271,19 +384,33 @@ function app() {
                                 grid: { display: false },
                                 ticks: { 
                                     color: textColor,
-                                    font: { size: 10 },
-                                    maxTicksLimit: 6
+                                    font: { size: 9 },
+                                    maxTicksLimit: 5
                                 }
                             },
                             y: {
+                                type: 'linear',
                                 display: true,
+                                position: 'left',
                                 min: 0,
                                 max: 100,
                                 grid: { color: gridColor },
                                 ticks: { 
                                     color: textColor,
-                                    font: { size: 10 },
+                                    font: { size: 9 },
                                     callback: (v) => v + '%',
+                                    maxTicksLimit: 4
+                                }
+                            },
+                            y1: {
+                                type: 'linear',
+                                display: hasVolt,
+                                position: 'right',
+                                grid: { drawOnChartArea: false },
+                                ticks: { 
+                                    color: '#3b82f6',
+                                    font: { size: 9 },
+                                    callback: (v) => v.toFixed(1) + 'V',
                                     maxTicksLimit: 4
                                 }
                             }
@@ -291,16 +418,6 @@ function app() {
                     }
                 });
             });
-        },
-
-        generateTimeLabels() {
-            const labels = [];
-            const now = new Date();
-            for (let i = 23; i >= 0; i--) {
-                const time = new Date(now - i * 3600000);
-                labels.push(time.getHours().toString().padStart(2, '0') + ':00');
-            }
-            return labels;
         },
 
         destroyCharts() {

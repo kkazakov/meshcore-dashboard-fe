@@ -245,26 +245,21 @@
                     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                         <template x-for="repeater in repeaters" :key="repeater.id">
                             <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-5 transition-colors">
-                                <div class="flex items-start justify-between mb-3">
-                                    <div>
-                                        <h4 class="font-semibold text-gray-800 dark:text-white" x-text="repeater.name"></h4>
-                                        <p class="text-xs text-gray-500 dark:text-gray-400 mt-1" x-text="repeater.public_key.substring(0, 20) + '...'"></p>
-                                    </div>
-                                    <span 
-                                        :class="repeater.enabled ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400' : 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400'"
-                                        class="px-2 py-1 text-xs font-medium rounded-full"
-                                        x-text="repeater.enabled ? 'Active' : 'Disabled'"
-                                    ></span>
+                                <div class="mb-3">
+                                    <h4 class="font-semibold text-gray-800 dark:text-white" x-text="repeater.name"></h4>
                                 </div>
-                                <div class="h-32 mb-3">
-                                    <canvas :id="'chart-' + repeater.id"></canvas>
+                                <div class="h-40 mb-3">
+                                    <canvas x-show="repeater.telemetry && repeater.telemetry.labels.length > 0" :id="'chart-' + repeater.id"></canvas>
+                                    <div x-show="!repeater.telemetry || repeater.telemetry.labels.length === 0" class="h-full flex items-center justify-center text-gray-400 dark:text-gray-500 text-sm">
+                                        No telemetry data
+                                    </div>
                                 </div>
                                 <div class="flex items-center justify-between text-sm">
                                     <span class="text-gray-600 dark:text-gray-400">Current</span>
                                     <span 
                                         class="font-semibold"
-                                        :class="repeater.currentBattery > 50 ? 'text-green-600 dark:text-green-400' : repeater.currentBattery > 20 ? 'text-yellow-600 dark:text-yellow-400' : 'text-red-600 dark:text-red-400'"
-                                        x-text="repeater.currentBattery.toFixed(1) + '%'"
+                                        :class="getBatteryClass(repeater.currentBattery)"
+                                        x-text="repeater.currentBattery != null ? repeater.currentBattery.toFixed(1) + '%' : 'N/A'"
                                     ></span>
                                 </div>
                             </div>
