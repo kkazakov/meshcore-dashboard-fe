@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Meshcore Dashboard</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="style.css" />
+    <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+</head>
+<body x-data="app()" x-init="init()">
+    <div x-show="view === 'login'" class="container login-container">
+        <div class="login-box">
+            <h1>Meshcore Dashboard</h1>
+            <form @submit.prevent="login()">
+                <div class="form-group">
+                    <label for="email">Email</label>
+                    <input type="email" id="email" x-model="credentials.email" required />
+                </div>
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" x-model="credentials.password" required />
+                </div>
+                <div x-show="error" class="error" x-text="error"></div>
+                <button type="submit" :disabled="loading">
+                    <span x-show="!loading">Login</span>
+                    <span x-show="loading">Logging in...</span>
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <div x-show="view === 'dashboard'" class="container dashboard-container">
+        <header class="header">
+            <h1>Meshcore Dashboard</h1>
+            <div class="user-info">
+                <span x-text="user.email"></span>
+                <button @click="logout()" class="logout-btn">Logout</button>
+            </div>
+        </header>
+        <main class="main-content">
+            <div class="sidebar">
+                <h2>Channels</h2>
+                <ul class="channel-list">
+                    <template x-for="channel in channels" :key="channel.index">
+                        <li>
+                            <span x-text="channel.name"></span>
+                            <small x-text="'Index: ' + channel.index"></small>
+                        </li>
+                    </template>
+                </ul>
+            </div>
+            <div class="content">
+                <div id="map" class="map"></div>
+            </div>
+        </main>
+    </div>
+    <script src="app.js"></script>
+</body>
+</html>
