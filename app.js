@@ -325,7 +325,7 @@ function app() {
             
             try {
                 const response = await fetch(
-                    `${API_BASE}/api/messages?channel=${encodeURIComponent(this.selectedChannel)}&from=0&limit=100&order=asc`,
+                    `${API_BASE}/api/messages?channel=${encodeURIComponent(this.selectedChannel)}&from=0&limit=100&order=desc`,
                     { headers: { 'x-api-token': token } }
                 );
 
@@ -339,7 +339,7 @@ function app() {
                 }
 
                 const data = await response.json();
-                this.messages = data.messages || [];
+                this.messages = (data.messages || []).reverse();
                 if (this.messages.length > 0) {
                     this.lastMessageTimestamp = this.messages[this.messages.length - 1].ts;
                 }
@@ -370,7 +370,7 @@ function app() {
             
             try {
                 const response = await fetch(
-                    `${API_BASE}/api/messages?channel=${encodeURIComponent(this.selectedChannel)}&since=${encodeURIComponent(this.lastMessageTimestamp)}&order=asc`,
+                    `${API_BASE}/api/messages?channel=${encodeURIComponent(this.selectedChannel)}&since=${encodeURIComponent(this.lastMessageTimestamp)}&order=desc`,
                     { headers: { 'x-api-token': token } }
                 );
 
@@ -382,7 +382,8 @@ function app() {
                 if (!response.ok) return;
 
                 const data = await response.json();
-                const newMessages = (data.messages || []).filter(msg => msg.ts > this.lastMessageTimestamp);
+                const rawMessages = data.messages || [];
+                const newMessages = rawMessages.filter(msg => msg.ts > this.lastMessageTimestamp).reverse();
                 
                 if (newMessages.length > 0) {
                     this.messages = [...this.messages, ...newMessages];
