@@ -14,9 +14,16 @@ function app() {
             username: ''
         },
         channels: [],
-        map: null,
+        selectedChannel: 'Public',
+        messages: [],
+        messagesLoading: false,
+        newMessage: '',
+        sending: false,
+        darkMode: false,
 
         async init() {
+            this.loadTheme();
+            
             const token = localStorage.getItem('api_token');
             const userData = localStorage.getItem('user');
             
@@ -25,11 +32,25 @@ function app() {
                 const valid = await this.verifyToken();
                 if (valid) {
                     this.view = 'dashboard';
-                    this.$nextTick(() => this.initMap());
+                    await this.fetchMessages();
                 } else {
                     this.clearSession();
                 }
             }
+        },
+
+        loadTheme() {
+            const savedTheme = localStorage.getItem('darkMode');
+            if (savedTheme !== null) {
+                this.darkMode = savedTheme === 'true';
+            } else {
+                this.darkMode = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            }
+        },
+
+        toggleTheme() {
+            this.darkMode = !this.darkMode;
+            localStorage.setItem('darkMode', this.darkMode);
         },
 
         async login() {
@@ -60,7 +81,7 @@ function app() {
                 this.view = 'dashboard';
                 
                 await this.fetchChannels();
-                this.$nextTick(() => this.initMap());
+                await this.fetchMessages();
             } catch (err) {
                 this.error = err.message;
             } finally {
@@ -94,13 +115,86 @@ function app() {
             this.channels = data.channels || [];
         },
 
+        async fetchMessages() {
+            this.messagesLoading = true;
+            const token = localStorage.getItem('api_token');
+            
+            try {
+                const response = await fetch(
+                    `${API_BASE}/api/messages?channel=${encodeURIComponent(this.selectedChannel)}&from=0&limit=100&order=asc`,
+                    { headers: { 'x-api-token': token } }
+                );
+
+                if (!response.ok) {
+                    throw new Error('Failed to fetch messages');
+                }
+
+                const data = await response.json();
+                this.messages = data.messages || [];
+                this.$nextTick(() => this.scrollToBottom());
+            } catch (err) {
+                console.error(err);
+            } finally {
+                this.messagesLoading = false;
+            }
+        },
+
+        async sendMessage() {
+            if (!this.newMessage.trim() || this.sending) return;
+            
+            this.sending = true;
+            const token = localStorage.getItem('api_token');
+
+            try {
+                const response = await fetch(`${API_BASE}/api/messages`, {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'x-api-token': token 
+                    },
+                    body: JSON.stringify({
+                        channel: this.selectedChannel,
+                        message: this.newMessage.trim()
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to send message');
+                }
+
+                this.newMessage = '';
+                await this.fetchMessages();
+            } catch (err) {
+                console.error(err);
+            } finally {
+                this.sending = false;
+            }
+        },
+
+        selectChannel(channelName) {
+            this.selectedChannel = channelName;
+            this.messages = [];
+            this.fetchMessages();
+        },
+
+        scrollToBottom() {
+            const container = this.$refs.messagesContainer;
+            if (container) {
+                container.scrollTop = container.scrollHeight;
+            }
+        },
+
+        formatTime(ts) {
+            const date = new Date(ts);
+            return date.toLocaleTimeString('en-US', { 
+                hour: '2-digit', 
+                minute: '2-digit' 
+            });
+        },
+
         logout() {
             this.clearSession();
             this.view = 'login';
-            if (this.map) {
-                this.map.remove();
-                this.map = null;
-            }
         },
 
         clearSession() {
@@ -108,15 +202,7 @@ function app() {
             localStorage.removeItem('user');
             this.user = { email: '', username: '' };
             this.channels = [];
-        },
-
-        initMap() {
-            if (this.map) return;
-            
-            this.map = L.map('map').setView([51.505, -0.09], 13);
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '© OpenStreetMap contributors'
-            }).addTo(this.map);
+            this.messages = [];
         }
     };
 }

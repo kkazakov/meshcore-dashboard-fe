@@ -1,61 +1,188 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" :class="{ 'dark': darkMode }">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Meshcore Dashboard</title>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <link rel="stylesheet" href="style.css" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#6366f1',
+                        secondary: '#8b5cf6'
+                    }
+                }
+            }
+        }
+    </script>
     <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 </head>
-<body x-data="app()" x-init="init()">
-    <div x-show="view === 'login'" class="container login-container">
-        <div class="login-box">
-            <h1>Meshcore Dashboard</h1>
-            <form @submit.prevent="login()">
-                <div class="form-group">
-                    <label for="email">Email</label>
-                    <input type="email" id="email" x-model="credentials.email" required />
+<body x-data="app()" x-init="init()" :class="darkMode ? 'bg-gray-900' : 'bg-gray-100'" class="min-h-screen transition-colors duration-300">
+    
+    <!-- Login View -->
+    <div x-show="view === 'login'" class="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500">
+        <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-8 w-full max-w-md mx-4 transition-colors">
+            <h1 class="text-3xl font-bold text-center mb-8 text-gray-800 dark:text-white">Meshcore Dashboard</h1>
+            <form @submit.prevent="login()" class="space-y-6">
+                <div>
+                    <label for="email" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Email</label>
+                    <input 
+                        type="email" 
+                        id="email" 
+                        x-model="credentials.email" 
+                        required
+                        class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all outline-none"
+                        placeholder="Enter your email"
+                    />
                 </div>
-                <div class="form-group">
-                    <label for="password">Password</label>
-                    <input type="password" id="password" x-model="credentials.password" required />
+                <div>
+                    <label for="password" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Password</label>
+                    <input 
+                        type="password" 
+                        id="password" 
+                        x-model="credentials.password" 
+                        required
+                        class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all outline-none"
+                        placeholder="Enter your password"
+                    />
                 </div>
-                <div x-show="error" class="error" x-text="error"></div>
-                <button type="submit" :disabled="loading">
-                    <span x-show="!loading">Login</span>
-                    <span x-show="loading">Logging in...</span>
+                <div x-show="error" class="bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 px-4 py-3 rounded-lg text-sm" x-text="error"></div>
+                <button 
+                    type="submit" 
+                    :disabled="loading"
+                    class="w-full py-3 px-4 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white font-semibold rounded-lg shadow-lg transform transition-all duration-200 hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+                >
+                    <span x-show="!loading">Sign In</span>
+                    <span x-show="loading" class="flex items-center justify-center gap-2">
+                        <svg class="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Signing in...
+                    </span>
                 </button>
             </form>
         </div>
     </div>
 
-    <div x-show="view === 'dashboard'" class="container dashboard-container">
-        <header class="header">
-            <h1>Meshcore Dashboard</h1>
-            <div class="user-info">
-                <span x-text="user.email"></span>
-                <button @click="logout()" class="logout-btn">Logout</button>
+    <!-- Dashboard View -->
+    <div x-show="view === 'dashboard'" class="min-h-screen flex flex-col">
+        <!-- Header -->
+        <header class="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700 transition-colors">
+            <div class="px-6 py-4 flex items-center justify-between">
+                <h1 class="text-2xl font-bold bg-gradient-to-r from-indigo-500 to-purple-600 bg-clip-text text-transparent">Meshcore Dashboard</h1>
+                <div class="flex items-center gap-4">
+                    <!-- Theme Toggle -->
+                    <button 
+                        @click="toggleTheme()" 
+                        class="p-2 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                        :title="darkMode ? 'Switch to light mode' : 'Switch to dark mode'"
+                    >
+                        <svg x-show="!darkMode" class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path>
+                        </svg>
+                        <svg x-show="darkMode" class="w-5 h-5 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path>
+                        </svg>
+                    </button>
+                    <span class="text-gray-600 dark:text-gray-300 text-sm" x-text="user.email"></span>
+                    <button 
+                        @click="logout()" 
+                        class="px-4 py-2 bg-red-500 hover:bg-red-600 text-white text-sm font-medium rounded-lg transition-colors"
+                    >
+                        Logout
+                    </button>
+                </div>
             </div>
         </header>
-        <main class="main-content">
-            <div class="sidebar">
-                <h2>Channels</h2>
-                <ul class="channel-list">
+
+        <!-- Main Content -->
+        <main class="flex-1 flex overflow-hidden">
+            <!-- Sidebar -->
+            <aside class="w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col transition-colors">
+                <div class="p-4 border-b border-gray-200 dark:border-gray-700">
+                    <h2 class="text-lg font-semibold text-gray-800 dark:text-white">Channels</h2>
+                </div>
+                <nav class="flex-1 overflow-y-auto p-2">
                     <template x-for="channel in channels" :key="channel.index">
-                        <li>
+                        <button 
+                            @click="selectChannel(channel.name)"
+                            :class="selectedChannel === channel.name 
+                                ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 border-l-4 border-indigo-500' 
+                                : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'"
+                            class="w-full text-left px-4 py-3 rounded-lg transition-all duration-200 font-medium"
+                        >
                             <span x-text="channel.name"></span>
-                            <small x-text="'Index: ' + channel.index"></small>
-                        </li>
+                        </button>
                     </template>
-                </ul>
-            </div>
-            <div class="content">
-                <div id="map" class="map"></div>
+                </nav>
+            </aside>
+
+            <!-- Chat Area -->
+            <div class="flex-1 flex flex-col bg-gray-50 dark:bg-gray-900 transition-colors">
+                <!-- Chat Header -->
+                <div class="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4 flex items-center justify-between transition-colors">
+                    <h3 class="text-lg font-semibold text-gray-800 dark:text-white" x-text="selectedChannel"></h3>
+                    <span class="text-sm text-gray-500 dark:text-gray-400" x-text="messages.length + ' messages'"></span>
+                </div>
+
+                <!-- Messages -->
+                <div class="flex-1 overflow-y-auto p-6 space-y-4" x-ref="messagesContainer">
+                    <template x-for="(msg, i) in messages" :key="msg.ts + i">
+                        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-4 max-w-3xl transition-colors">
+                            <div class="flex items-center gap-3 mb-2">
+                                <div class="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-white text-sm font-semibold">
+                                    <span x-text="msg.sender.charAt(0).toUpperCase()"></span>
+                                </div>
+                                <span class="font-semibold text-gray-800 dark:text-white" x-text="msg.sender"></span>
+                                <span class="text-xs text-gray-500 dark:text-gray-400" x-text="formatTime(msg.ts)"></span>
+                                <span x-show="msg.hops > 0" class="text-xs px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400" x-text="msg.hops + ' hops'"></span>
+                            </div>
+                            <p class="text-gray-700 dark:text-gray-300 pl-11" x-text="msg.text"></p>
+                        </div>
+                    </template>
+                    <div x-show="messages.length === 0 && !messagesLoading" class="text-center py-12 text-gray-500 dark:text-gray-400">
+                        No messages yet
+                    </div>
+                    <div x-show="messagesLoading" class="flex justify-center py-8">
+                        <svg class="animate-spin h-8 w-8 text-indigo-500" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                    </div>
+                </div>
+
+                <!-- Message Input -->
+                <div class="bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 p-4 transition-colors">
+                    <div class="flex gap-3 max-w-4xl mx-auto">
+                        <input 
+                            type="text" 
+                            x-model="newMessage" 
+                            @keydown.enter="sendMessage()"
+                            :placeholder="'Message ' + selectedChannel"
+                            :disabled="sending"
+                            class="flex-1 px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all outline-none disabled:opacity-50"
+                        />
+                        <button 
+                            @click="sendMessage()" 
+                            :disabled="!newMessage.trim() || sending"
+                            class="px-6 py-3 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white font-semibold rounded-xl shadow-lg transform transition-all duration-200 hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+                        >
+                            <span x-show="!sending">Send</span>
+                            <svg x-show="sending" class="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
             </div>
         </main>
     </div>
+
     <script src="app.js"></script>
 </body>
 </html>
