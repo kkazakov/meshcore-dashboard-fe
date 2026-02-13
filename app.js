@@ -2,7 +2,7 @@ const API_BASE = 'http://127.0.0.1:8000';
 
 function app() {
     return {
-        view: 'login',
+        view: 'loading',
         loading: false,
         error: null,
         credentials: {
@@ -11,10 +11,12 @@ function app() {
         },
         user: {
             email: '',
-            username: ''
+            username: '',
+            deviceName: ''
         },
         channels: [],
         selectedChannel: 'Public',
+        selectedChannelIndex: 0,
         messages: [],
         messagesLoading: false,
         newMessage: '',
@@ -23,6 +25,7 @@ function app() {
 
         async init() {
             this.loadTheme();
+            this.applyTheme();
             
             const token = localStorage.getItem('api_token');
             const userData = localStorage.getItem('user');
@@ -32,10 +35,15 @@ function app() {
                 const valid = await this.verifyToken();
                 if (valid) {
                     this.view = 'dashboard';
+                    this.loadChannelFromUrl();
                     await this.fetchMessages();
+                    this.$nextTick(() => this.focusInput());
                 } else {
                     this.clearSession();
+                    this.view = 'login';
                 }
+            } else {
+                this.view = 'login';
             }
         },
 
@@ -48,9 +56,35 @@ function app() {
             }
         },
 
+        applyTheme() {
+            if (this.darkMode) {
+                document.documentElement.classList.add('dark');
+            } else {
+                document.documentElement.classList.remove('dark');
+            }
+        },
+
         toggleTheme() {
             this.darkMode = !this.darkMode;
             localStorage.setItem('darkMode', this.darkMode);
+            this.applyTheme();
+        },
+
+        loadChannelFromUrl() {
+            const hash = window.location.hash;
+            const match = hash.match(/#channel-(\d+)/);
+            if (match) {
+                const index = parseInt(match[1], 10);
+                const channel = this.channels.find(c => c.index === index);
+                if (channel) {
+                    this.selectedChannelIndex = index;
+                    this.selectedChannel = channel.name;
+                }
+            }
+        },
+
+        updateUrl() {
+            window.location.hash = `channel-${this.selectedChannelIndex}`;
         },
 
         async login() {
@@ -73,15 +107,18 @@ function app() {
                 localStorage.setItem('api_token', data.token);
                 localStorage.setItem('user', JSON.stringify({
                     email: data.email,
-                    username: data.username
+                    username: data.username,
+                    deviceName: data.device_name
                 }));
 
-                this.user = { email: data.email, username: data.username };
+                this.user = { email: data.email, username: data.username, deviceName: data.device_name };
                 this.credentials = { email: '', password: '' };
                 this.view = 'dashboard';
                 
                 await this.fetchChannels();
+                this.loadChannelFromUrl();
                 await this.fetchMessages();
+                this.$nextTick(() => this.focusInput());
             } catch (err) {
                 this.error = err.message;
             } finally {
@@ -94,8 +131,11 @@ function app() {
             if (!token) return false;
 
             try {
-                await this.fetchChannels();
-                return true;
+                const response = await fetch(`${API_BASE}/status`, {
+                    headers: { 'x-api-key': token }
+                });
+                const data = await response.json();
+                return data.authenticated === true;
             } catch {
                 return false;
             }
@@ -164,6 +204,7 @@ function app() {
 
                 this.newMessage = '';
                 await this.fetchMessages();
+                this.focusInput();
             } catch (err) {
                 console.error(err);
             } finally {
@@ -171,10 +212,20 @@ function app() {
             }
         },
 
-        selectChannel(channelName) {
-            this.selectedChannel = channelName;
+        selectChannel(index, name) {
+            this.selectedChannelIndex = index;
+            this.selectedChannel = name;
             this.messages = [];
+            this.updateUrl();
             this.fetchMessages();
+            this.focusInput();
+        },
+
+        focusInput() {
+            const input = this.$refs.messageInput;
+            if (input) {
+                input.focus();
+            }
         },
 
         scrollToBottom() {
@@ -192,6 +243,10 @@ function app() {
             });
         },
 
+        isMyMessage(msg) {
+            return msg.sender === this.user.deviceName;
+        },
+
         logout() {
             this.clearSession();
             this.view = 'login';
@@ -200,9 +255,10 @@ function app() {
         clearSession() {
             localStorage.removeItem('api_token');
             localStorage.removeItem('user');
-            this.user = { email: '', username: '' };
+            this.user = { email: '', username: '', deviceName: '' };
             this.channels = [];
             this.messages = [];
+            window.location.hash = '';
         }
     };
 }

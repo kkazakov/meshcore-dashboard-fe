@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" :class="{ 'dark': darkMode }">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -20,8 +20,19 @@
     </script>
     <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
 </head>
-<body x-data="app()" x-init="init()" :class="darkMode ? 'bg-gray-900' : 'bg-gray-100'" class="min-h-screen transition-colors duration-300">
+<body x-data="app()" x-init="init()" :class="darkMode ? 'bg-gray-900' : 'bg-gray-100'" class="h-screen overflow-hidden transition-colors duration-300">
     
+    <!-- Loading View -->
+    <div x-show="view === 'loading'" class="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500">
+        <div class="flex flex-col items-center gap-4">
+            <svg class="animate-spin h-12 w-12 text-white" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <span class="text-white text-lg font-medium">Loading...</span>
+        </div>
+    </div>
+
     <!-- Login View -->
     <div x-show="view === 'login'" class="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500">
         <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-8 w-full max-w-md mx-4 transition-colors">
@@ -69,7 +80,7 @@
     </div>
 
     <!-- Dashboard View -->
-    <div x-show="view === 'dashboard'" class="min-h-screen flex flex-col">
+    <div x-show="view === 'dashboard'" class="h-screen flex flex-col overflow-hidden">
         <!-- Header -->
         <header class="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700 transition-colors">
             <div class="px-6 py-4 flex items-center justify-between">
@@ -100,17 +111,17 @@
         </header>
 
         <!-- Main Content -->
-        <main class="flex-1 flex overflow-hidden">
+        <main class="flex-1 min-h-0 flex overflow-hidden">
             <!-- Sidebar -->
             <aside class="w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col transition-colors">
                 <div class="p-4 border-b border-gray-200 dark:border-gray-700">
                     <h2 class="text-lg font-semibold text-gray-800 dark:text-white">Channels</h2>
                 </div>
-                <nav class="flex-1 overflow-y-auto p-2">
+                <nav class="flex-1 min-h-0 overflow-y-auto p-2">
                     <template x-for="channel in channels" :key="channel.index">
                         <button 
-                            @click="selectChannel(channel.name)"
-                            :class="selectedChannel === channel.name 
+                            @click="selectChannel(channel.index, channel.name)"
+                            :class="selectedChannelIndex === channel.index 
                                 ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 border-l-4 border-indigo-500' 
                                 : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'"
                             class="w-full text-left px-4 py-3 rounded-lg transition-all duration-200 font-medium"
@@ -122,7 +133,7 @@
             </aside>
 
             <!-- Chat Area -->
-            <div class="flex-1 flex flex-col bg-gray-50 dark:bg-gray-900 transition-colors">
+            <div class="flex-1 flex flex-col min-h-0 bg-gray-50 dark:bg-gray-900 transition-colors">
                 <!-- Chat Header -->
                 <div class="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4 flex items-center justify-between transition-colors">
                     <h3 class="text-lg font-semibold text-gray-800 dark:text-white" x-text="selectedChannel"></h3>
@@ -130,18 +141,26 @@
                 </div>
 
                 <!-- Messages -->
-                <div class="flex-1 overflow-y-auto p-6 space-y-4" x-ref="messagesContainer">
+                <div class="flex-1 min-h-0 overflow-y-auto p-6 space-y-4" x-ref="messagesContainer">
                     <template x-for="(msg, i) in messages" :key="msg.ts + i">
-                        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-4 max-w-3xl transition-colors">
-                            <div class="flex items-center gap-3 mb-2">
-                                <div class="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-white text-sm font-semibold">
-                                    <span x-text="msg.sender.charAt(0).toUpperCase()"></span>
+                        <div :class="isMyMessage(msg) ? 'flex justify-end' : 'flex justify-start'">
+                            <div :class="isMyMessage(msg) 
+                                ? 'bg-indigo-500 dark:bg-indigo-600 text-white rounded-xl shadow-sm p-4 max-w-3xl transition-colors' 
+                                : 'bg-white dark:bg-gray-800 rounded-xl shadow-sm p-4 max-w-3xl transition-colors'">
+                                <div class="flex items-center gap-3 mb-2">
+                                    <div :class="isMyMessage(msg) 
+                                        ? 'w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-white text-sm font-semibold'
+                                        : 'w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-white text-sm font-semibold'">
+                                        <span x-text="msg.sender.charAt(0).toUpperCase()"></span>
+                                    </div>
+                                    <span :class="isMyMessage(msg) ? 'font-semibold text-white' : 'font-semibold text-gray-800 dark:text-white'" x-text="msg.sender"></span>
+                                    <span :class="isMyMessage(msg) ? 'text-xs text-white/70' : 'text-xs text-gray-500 dark:text-gray-400'" x-text="formatTime(msg.ts)"></span>
+                                    <span x-show="msg.hops > 0" :class="isMyMessage(msg) 
+                                        ? 'text-xs px-2 py-0.5 rounded-full bg-white/20 text-white' 
+                                        : 'text-xs px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400'" x-text="msg.hops + ' hops'"></span>
                                 </div>
-                                <span class="font-semibold text-gray-800 dark:text-white" x-text="msg.sender"></span>
-                                <span class="text-xs text-gray-500 dark:text-gray-400" x-text="formatTime(msg.ts)"></span>
-                                <span x-show="msg.hops > 0" class="text-xs px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400" x-text="msg.hops + ' hops'"></span>
+                                <p :class="isMyMessage(msg) ? 'text-white pl-11' : 'text-gray-700 dark:text-gray-300 pl-11'" x-text="msg.text"></p>
                             </div>
-                            <p class="text-gray-700 dark:text-gray-300 pl-11" x-text="msg.text"></p>
                         </div>
                     </template>
                     <div x-show="messages.length === 0 && !messagesLoading" class="text-center py-12 text-gray-500 dark:text-gray-400">
@@ -157,9 +176,10 @@
 
                 <!-- Message Input -->
                 <div class="bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 p-4 transition-colors">
-                    <div class="flex gap-3 max-w-4xl mx-auto">
+                    <div class="flex gap-3">
                         <input 
                             type="text" 
+                            x-ref="messageInput"
                             x-model="newMessage" 
                             @keydown.enter="sendMessage()"
                             :placeholder="'Message ' + selectedChannel"
