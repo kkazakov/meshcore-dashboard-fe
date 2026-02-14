@@ -1,0 +1,9 @@
+services:
+  meshcore-dashboard:
+    build:
+      context: .
+      args:
+        API_ENDPOINT: ${API_ENDPOINT}
+    ports:
+      - "8080:80"
+    restart: unless-stopped
