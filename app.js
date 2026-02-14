@@ -304,12 +304,13 @@ function app() {
         formatLastReadingTime(ts) {
             if (!ts) return '';
             const date = new Date(ts);
+            
+            const timeStr = date.getHours().toString().padStart(2, '0') + ':' + date.getMinutes().toString().padStart(2, '0');
+            
             const now = new Date();
             const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
             const readingDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
             const diffDays = Math.floor((today - readingDate) / (1000 * 60 * 60 * 24));
-            
-            const timeStr = date.getHours().toString().padStart(2, '0') + ':' + date.getMinutes().toString().padStart(2, '0');
             
             if (diffDays === 0) {
                 return `Today at ${timeStr}`;
@@ -615,10 +616,11 @@ y1: {
         },
 
         formatTime(ts) {
-            const date = new Date(ts);
-            return date.toLocaleTimeString('en-US', { 
+            const date = new Date(ts + 'Z');
+            return date.toLocaleTimeString('en-GB', { 
                 hour: '2-digit', 
-                minute: '2-digit' 
+                minute: '2-digit',
+                hour12: false
             });
         },
 
