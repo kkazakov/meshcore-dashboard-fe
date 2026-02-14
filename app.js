@@ -244,7 +244,8 @@ function app() {
                     this.repeaters[idx] = {
                         ...this.repeaters[idx],
                         telemetry: telemetry,
-                        currentBattery: lastPct != null ? lastPct : null
+                        currentBattery: lastPct != null ? lastPct : null,
+                        lastReadingTime: telemetry.lastReadingTime
                     };
                 }
             } catch (err) {
@@ -271,6 +272,8 @@ function app() {
             const percentage = [];
             const voltage = [];
             const labels = [];
+            const lastReadingTime = sortedTimes.length > 0 ? sortedTimes[sortedTimes.length - 1] : null;
+            const lastReadingFormatted = lastReadingTime ? this.formatLastReadingTime(lastReadingTime) : 'N/A';
             
             for (let i = 0; i < sortedTimes.length; i += step) {
                 const time = sortedTimes[i];
@@ -283,7 +286,7 @@ function app() {
                 voltage.push(volt != null ? volt : null);
             }
             
-            return { percentage, voltage, labels };
+            return { percentage, voltage, labels, lastReadingTime, lastReadingFormatted };
         },
 
         formatTelemetryTime(ts) {
@@ -296,6 +299,28 @@ function app() {
             if (battery > 50) return 'text-green-600 dark:text-green-400';
             if (battery > 20) return 'text-yellow-600 dark:text-yellow-400';
             return 'text-red-600 dark:text-red-400';
+        },
+
+        formatLastReadingTime(ts) {
+            if (!ts) return '';
+            const date = new Date(ts);
+            const now = new Date();
+            const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            const readingDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+            const diffDays = Math.floor((today - readingDate) / (1000 * 60 * 60 * 24));
+            
+            const timeStr = date.getHours().toString().padStart(2, '0') + ':' + date.getMinutes().toString().padStart(2, '0');
+            
+            if (diffDays === 0) {
+                return `Today at ${timeStr}`;
+            } else if (diffDays === 1) {
+                return `Yesterday at ${timeStr}`;
+            } else {
+                const day = date.getDate().toString().padStart(2, '0');
+                const month = (date.getMonth() + 1).toString().padStart(2, '0');
+                const year = date.getFullYear();
+                return `${timeStr} on ${day}.${month}.${year}`;
+            }
         },
 
         renderCharts() {
@@ -405,18 +430,20 @@ function app() {
                                     maxTicksLimit: 4
                                 }
                             },
-                            y1: {
-                                type: 'linear',
-                                display: hasVolt,
-                                position: 'right',
-                                grid: { drawOnChartArea: false },
-                                ticks: { 
-                                    color: '#3b82f6',
-                                    font: { size: 9 },
-                                    callback: (v) => v.toFixed(1) + 'V',
-                                    maxTicksLimit: 4
-                                }
-                            }
+y1: {
+                                 type: 'linear',
+                                 display: hasVolt,
+                                 position: 'right',
+                                 min: 3.2,
+                                 max: 4.2,
+                                 grid: { drawOnChartArea: false },
+                                 ticks: { 
+                                     color: '#3b82f6',
+                                     font: { size: 9 },
+                                     callback: (v) => v.toFixed(1) + 'V',
+                                     maxTicksLimit: 4
+                                 }
+                             }
                         }
                     }
                 });

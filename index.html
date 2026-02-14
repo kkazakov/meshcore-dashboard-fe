@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Meshcore Dashboard</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📡</text></svg>">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script>
@@ -45,6 +46,7 @@
                         type="email" 
                         id="email" 
                         x-model="credentials.email" 
+                        autocomplete="email"
                         required
                         class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all outline-none"
                         placeholder="Enter your email"
@@ -56,6 +58,7 @@
                         type="password" 
                         id="password" 
                         x-model="credentials.password" 
+                        autocomplete="current-password"
                         required
                         class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all outline-none"
                         placeholder="Enter your password"
@@ -248,7 +251,7 @@
                     <div x-show="!repeatersLoading && repeaters.length === 0" class="text-center py-12 text-gray-500 dark:text-gray-400">
                         No repeaters found
                     </div>
-                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                         <template x-for="repeater in repeaters" :key="repeater.id">
                             <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-5 transition-colors">
                                 <div class="mb-3">
@@ -260,14 +263,14 @@
                                         No telemetry data
                                     </div>
                                 </div>
-                                <div class="flex items-center justify-between text-sm">
-                                    <span class="text-gray-600 dark:text-gray-400">Current</span>
-                                    <span 
-                                        class="font-semibold"
-                                        :class="getBatteryClass(repeater.currentBattery)"
-                                        x-text="repeater.currentBattery != null ? repeater.currentBattery.toFixed(1) + '%' : 'N/A'"
-                                    ></span>
-                                </div>
+<div class="flex items-center justify-between text-sm">
+                                     <span class="text-gray-600 dark:text-gray-400">Last reading</span>
+                                     <span 
+                                         class="font-semibold"
+                                         :class="getBatteryClass(repeater.currentBattery)"
+                                         x-text="repeater.telemetry ? repeater.telemetry.lastReadingFormatted : 'N/A'"
+                                     ></span>
+                                 </div>
                             </div>
                         </template>
                     </div>
