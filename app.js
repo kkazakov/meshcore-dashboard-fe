@@ -20,6 +20,7 @@ function app() {
         selectedChannelIndex: 0,
         messages: [],
         messagesLoading: false,
+        messagesLoaded: false,
         lastMessageTimestamp: null,
         pollerInterval: null,
         newMessage: '',
@@ -45,6 +46,7 @@ function app() {
                     await this.fetchChannels();
                     this.loadChannelFromUrl();
                     await this.fetchMessages();
+                    this.messagesLoaded = true;
                     this.startPoller();
                     this.$nextTick(() => this.focusInput());
                 } else {
@@ -130,6 +132,7 @@ function app() {
                 await this.fetchChannels();
                 this.loadChannelFromUrl();
                 await this.fetchMessages();
+                this.messagesLoaded = true;
                 this.startPoller();
                 this.$nextTick(() => this.focusInput());
             } catch (err) {
@@ -562,8 +565,11 @@ function app() {
             this.selectedChannel = name;
             this.messages = [];
             this.lastMessageTimestamp = null;
+            this.messagesLoaded = false;
             this.updateUrl();
-            this.fetchMessages();
+            this.fetchMessages().then(() => {
+                this.messagesLoaded = true;
+            });
             this.focusInput();
         },
 
@@ -607,6 +613,7 @@ function app() {
             this.channels = [];
             this.messages = [];
             this.lastMessageTimestamp = null;
+            this.messagesLoaded = false;
             window.location.hash = '';
         }
     };
