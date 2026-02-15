@@ -577,8 +577,7 @@ y1: {
             this.wsAuthenticated = false;
 
             ws.onopen = () => {
-                // Reset backoff on successful connection
-                this.wsReconnectDelay = 1000;
+                console.log('[WS] connected, sending auth');
                 ws.send(JSON.stringify({ type: 'auth', token }));
             };
 
@@ -591,6 +590,8 @@ y1: {
                 }
 
                 if (message.type === 'welcome') {
+                    // Only reset back-off once the server has accepted the auth
+                    this.wsReconnectDelay = 1000;
                     this.wsAuthenticated = true;
                     return;
                 }
