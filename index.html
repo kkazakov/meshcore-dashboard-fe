@@ -158,9 +158,14 @@
                                 :class="selectedChannelIndex === channel.index 
                                     ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 border-l-4 border-indigo-500' 
                                     : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'"
-                                class="w-full text-left px-4 py-3 rounded-lg transition-all duration-200 font-medium"
+                                class="w-full text-left px-4 py-3 rounded-lg transition-all duration-200 font-medium flex items-center justify-between"
                             >
                                 <span x-text="channel.name"></span>
+                                <span 
+                                    x-show="_queuedCountForChannel(channel.name) > 0"
+                                    x-text="_queuedCountForChannel(channel.name)"
+                                    class="ml-2 min-w-[1.25rem] h-5 px-1 flex items-center justify-center rounded-full bg-indigo-500 text-white text-xs font-bold leading-none"
+                                ></span>
                             </button>
                         </template>
                     </nav>
@@ -171,7 +176,6 @@
                     <!-- Chat Header -->
                     <div class="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4 flex items-center justify-between transition-colors">
                         <h3 class="text-lg font-semibold text-gray-800 dark:text-white" x-text="selectedChannel"></h3>
-                        <span class="text-sm text-gray-500 dark:text-gray-400" x-text="messages.length + ' messages'"></span>
                     </div>
 
                     <!-- Messages -->

@@ -1,4 +1,5 @@
 const API_BASE = 'http://127.0.0.1:8000';
+const WS_BASE = 'ws://127.0.0.1:8000';
 
 function app() {
     return {
@@ -22,7 +23,12 @@ function app() {
         messagesLoading: false,
         messagesLoaded: false,
         lastMessageTimestamp: null,
-        pollerInterval: null,
+        // displayQueue: { [channelName]: [ ...messages ] }
+        displayQueue: {},
+        wsSocket: null,
+        wsReconnectDelay: 1000,
+        wsReconnectTimer: null,
+        wsAuthenticated: false,
         newMessage: '',
         sending: false,
         darkMode: false,
@@ -30,10 +36,18 @@ function app() {
         repeaters: [],
         repeatersLoading: false,
         repeaterCharts: {},
+        // tab visibility tracking
+        _docHidden: false,
+        _hiddenUnread: 0,
+        _originalTitle: 'Meshcore Dashboard',
+        _visibilityHandler: null,
 
         async init() {
             this.loadTheme();
             this.applyTheme();
+
+            this._originalTitle = document.title;
+            this._setupVisibilityHandler();
             
             const token = localStorage.getItem('api_token');
             const userData = localStorage.getItem('user');
@@ -47,7 +61,7 @@ function app() {
                     this.loadChannelFromUrl();
                     await this.fetchMessages();
                     this.messagesLoaded = true;
-                    this.startPoller();
+                    this.connectWebSocket();
                     this.$nextTick(() => this.focusInput());
                 } else {
                     this.clearSession();
@@ -56,6 +70,54 @@ function app() {
             } else {
                 this.view = 'login';
             }
+        },
+
+        _setupVisibilityHandler() {
+            this._visibilityHandler = () => {
+                this._docHidden = document.hidden;
+                if (!document.hidden) {
+                    // Tab became visible — flush queue for current channel and reset unread
+                    this._flushQueueForCurrentChannel();
+                    this._hiddenUnread = 0;
+                    document.title = this._originalTitle;
+                }
+            };
+            document.addEventListener('visibilitychange', this._visibilityHandler);
+        },
+
+        _teardownVisibilityHandler() {
+            if (this._visibilityHandler) {
+                document.removeEventListener('visibilitychange', this._visibilityHandler);
+                this._visibilityHandler = null;
+            }
+        },
+
+        // Returns the total number of queued (unread) messages across all channels
+        _totalQueuedCount() {
+            return Object.values(this.displayQueue).reduce((sum, arr) => sum + arr.length, 0);
+        },
+
+        // Returns the queued count for a specific channel name
+        _queuedCountForChannel(channelName) {
+            return (this.displayQueue[channelName] || []).length;
+        },
+
+        // Flush the display queue for the currently selected channel into visible messages
+        _flushQueueForCurrentChannel() {
+            const queued = this.displayQueue[this.selectedChannel];
+            if (!queued || queued.length === 0) return;
+
+            // Filter out messages we already have (by ts)
+            const existingTs = new Set(this.messages.map(m => m.ts));
+            const newOnes = queued.filter(m => !existingTs.has(m.ts));
+            if (newOnes.length > 0) {
+                this.messages = [...this.messages, ...newOnes];
+                this.$nextTick(() => this.scrollToBottom());
+            }
+            // Clear this channel from the queue
+            const updated = { ...this.displayQueue };
+            delete updated[this.selectedChannel];
+            this.displayQueue = updated;
         },
 
         loadTheme() {
@@ -133,7 +195,7 @@ function app() {
                 this.loadChannelFromUrl();
                 await this.fetchMessages();
                 this.messagesLoaded = true;
-                this.startPoller();
+                this.connectWebSocket();
                 this.$nextTick(() => this.focusInput());
             } catch (err) {
                 this.error = err.message;
@@ -464,6 +526,8 @@ y1: {
                 this.$nextTick(() => this.renderCharts());
             } else if (page === 'messages') {
                 this.destroyCharts();
+                // When switching back to messages, flush the queue for the current channel
+                this._flushQueueForCurrentChannel();
             }
         },
 
@@ -499,52 +563,137 @@ y1: {
             }
         },
 
-        startPoller() {
-            this.stopPoller();
-            this.pollerInterval = setInterval(() => this.pollNewMessages(), 2000);
-        },
+        // ─── WebSocket ────────────────────────────────────────────────────────────
 
-        stopPoller() {
-            if (this.pollerInterval) {
-                clearInterval(this.pollerInterval);
-                this.pollerInterval = null;
-            }
-        },
-
-        async pollNewMessages() {
-            if (!this.lastMessageTimestamp) return;
-            
+        connectWebSocket() {
             const token = localStorage.getItem('api_token');
-            
-            try {
-                const response = await fetch(
-                    `${API_BASE}/api/messages?channel=${encodeURIComponent(this.selectedChannel)}&since=${encodeURIComponent(this.lastMessageTimestamp)}&order=desc`,
-                    { headers: { 'x-api-token': token } }
-                );
+            if (!token) return;
 
-                if (response.status === 401) {
-                    this.handleUnauthorized();
+            // Clean up any existing socket
+            this.disconnectWebSocket(false);
+
+            const ws = new WebSocket(`${WS_BASE}/ws`);
+            this.wsSocket = ws;
+            this.wsAuthenticated = false;
+
+            ws.onopen = () => {
+                console.log('[WS] connected, sending auth');
+                ws.send(JSON.stringify({ type: 'auth', token }));
+            };
+
+            ws.onmessage = (event) => {
+                let message;
+                try {
+                    message = JSON.parse(event.data);
+                } catch {
                     return;
                 }
 
-                if (!response.ok) return;
+                if (message.type === 'welcome') {
+                    // Only reset back-off once the server has accepted the auth
+                    this.wsReconnectDelay = 1000;
+                    this.wsAuthenticated = true;
+                    return;
+                }
 
-                const data = await response.json();
-                const rawMessages = data.messages || [];
-                const newMessages = rawMessages.filter(msg => msg.ts > this.lastMessageTimestamp).reverse();
-                
-                if (newMessages.length > 0) {
-                    this.messages = [...this.messages, ...newMessages];
-                    this.lastMessageTimestamp = newMessages[newMessages.length - 1].ts;
+                if (message.type === 'new_message' && message.data) {
+                    this._handleWsMessage(message.data);
+                }
+            };
+
+            ws.onclose = () => {
+                this.wsAuthenticated = false;
+                this.wsSocket = null;
+                this._scheduleReconnect();
+            };
+
+            ws.onerror = () => {
+                // onclose will fire after onerror — reconnect logic lives there
+            };
+        },
+
+        disconnectWebSocket(cancelReconnect = true) {
+            if (cancelReconnect && this.wsReconnectTimer) {
+                clearTimeout(this.wsReconnectTimer);
+                this.wsReconnectTimer = null;
+            }
+            if (this.wsSocket) {
+                // Remove handlers to avoid triggering reconnect on intentional close
+                this.wsSocket.onclose = null;
+                this.wsSocket.onerror = null;
+                this.wsSocket.close();
+                this.wsSocket = null;
+            }
+            this.wsAuthenticated = false;
+        },
+
+        _scheduleReconnect() {
+            // Only reconnect if we still have a session
+            if (!localStorage.getItem('api_token')) return;
+
+            const delay = this.wsReconnectDelay;
+            // Exponential back-off capped at 30s
+            this.wsReconnectDelay = Math.min(this.wsReconnectDelay * 2, 30000);
+
+            this.wsReconnectTimer = setTimeout(() => {
+                this.wsReconnectTimer = null;
+                this.connectWebSocket();
+            }, delay);
+        },
+
+        // Normalise a WS new_message payload into the same shape as REST messages
+        _normaliseWsMessage(data) {
+            return {
+                ts: data.received_at,
+                sender: data.sender_name,
+                text: data.text,
+                hops: data.path_len != null ? data.path_len : 0,
+                snr: data.snr,
+                channel_idx: data.channel_idx,
+                channel_name: data.channel_name,
+            };
+        },
+
+        _handleWsMessage(data) {
+            const msg = this._normaliseWsMessage(data);
+            const channelName = data.channel_name;
+
+            const isCurrentChannel = channelName === this.selectedChannel;
+            const isMessagesPage = this.currentPage === 'messages';
+            const isVisible = !document.hidden;
+
+            if (isCurrentChannel && isMessagesPage && isVisible) {
+                // Message is immediately visible — append directly
+                const existingTs = new Set(this.messages.map(m => m.ts));
+                if (!existingTs.has(msg.ts)) {
+                    this.messages = [...this.messages, msg];
                     this.$nextTick(() => this.scrollToBottom());
                 }
-            } catch (err) {
-                console.error(err);
+            } else {
+                // Add to display queue for this channel
+                const updated = { ...this.displayQueue };
+                if (!updated[channelName]) {
+                    updated[channelName] = [];
+                }
+                // Avoid duplicates
+                const alreadyQueued = updated[channelName].some(m => m.ts === msg.ts);
+                if (!alreadyQueued) {
+                    updated[channelName] = [...updated[channelName], msg];
+                }
+                this.displayQueue = updated;
+
+                // Update browser title if tab is hidden
+                if (document.hidden) {
+                    this._hiddenUnread++;
+                    document.title = `(${this._hiddenUnread}) ${this._originalTitle}`;
+                }
             }
         },
 
+        // ─── End WebSocket ────────────────────────────────────────────────────────
+
         handleUnauthorized() {
-            this.stopPoller();
+            this.disconnectWebSocket();
             this.destroyCharts();
             this.clearSession();
             this.view = 'login';
@@ -597,6 +746,8 @@ y1: {
             this.updateUrl();
             this.fetchMessages().then(() => {
                 this.messagesLoaded = true;
+                // After loading, also flush any queued messages for this channel
+                this._flushQueueForCurrentChannel();
             });
             this.focusInput();
         },
@@ -629,7 +780,8 @@ y1: {
         },
 
         logout() {
-            this.stopPoller();
+            this.disconnectWebSocket();
+            this._teardownVisibilityHandler();
             this.destroyCharts();
             this.clearSession();
             this.view = 'login';
@@ -641,8 +793,11 @@ y1: {
             this.user = { email: '', username: '', deviceName: '' };
             this.channels = [];
             this.messages = [];
+            this.displayQueue = {};
             this.lastMessageTimestamp = null;
             this.messagesLoaded = false;
+            this._hiddenUnread = 0;
+            document.title = this._originalTitle;
             window.location.hash = '';
         }
     };

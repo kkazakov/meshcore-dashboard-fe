@@ -4,6 +4,7 @@ services:
       context: .
       args:
         API_ENDPOINT: ${API_ENDPOINT}
+        WS_ENDPOINT: ${WS_ENDPOINT}
     ports:
       - "8080:80"
     restart: unless-stopped
