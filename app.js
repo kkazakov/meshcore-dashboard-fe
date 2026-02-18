@@ -583,7 +583,10 @@ function app() {
 
         formatLastReadingTime(ts) {
             if (!ts) return '';
-            const date = new Date(ts);
+            const normalised = (ts && !/[Zz]$/.test(ts) && !/[+-]\d{2}:?\d{2}$/.test(ts))
+                ? String(ts).replace(' ', 'T') + 'Z'
+                : ts;
+            const date = new Date(normalised);
             
             const timeStr = date.getHours().toString().padStart(2, '0') + ':' + date.getMinutes().toString().padStart(2, '0');
             
