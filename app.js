@@ -37,6 +37,10 @@ function app() {
         repeaters: [],
         repeatersLoading: false,
         repeaterCharts: {},
+        showAddRepeaterModal: false,
+        addRepeaterLoading: false,
+        addRepeaterError: null,
+        newRepeaterForm: { name: '', publicKey: '' },
         // tab visibility tracking
         _docHidden: false,
         _hiddenUnread: 0,
@@ -271,7 +275,8 @@ function app() {
                 this.repeaters = (data.repeaters || []).map(r => ({
                     ...r,
                     telemetry: null,
-                    currentBattery: null
+                    currentBattery: null,
+                    _toggling: false
                 }));
                 
                 await Promise.all(this.repeaters.map(r => this.fetchRepeaterTelemetry(r)));
@@ -280,6 +285,107 @@ function app() {
                 console.error(err);
             } finally {
                 this.repeatersLoading = false;
+            }
+        },
+
+        async addRepeater() {
+            this.addRepeaterError = null;
+            this.addRepeaterLoading = true;
+            const token = localStorage.getItem('api_token');
+
+            try {
+                const response = await fetch(`${API_BASE}/api/repeaters`, {
+                    method: 'POST',
+                    headers: {
+                        'content-type': 'application/json',
+                        'x-api-token': token
+                    },
+                    body: JSON.stringify({
+                        name: this.newRepeaterForm.name,
+                        public_key: this.newRepeaterForm.publicKey
+                    })
+                });
+
+                if (response.status === 401) {
+                    this.handleUnauthorized();
+                    return;
+                }
+
+                if (!response.ok) {
+                    const err = await response.json().catch(() => ({}));
+                    this.addRepeaterError = err.message || 'Failed to add repeater';
+                    return;
+                }
+
+                // Close modal, reset form, refresh list
+                this.showAddRepeaterModal = false;
+                this.newRepeaterForm = { name: '', publicKey: '' };
+                await this.fetchRepeaters();
+            } catch (err) {
+                this.addRepeaterError = 'Network error — please try again';
+                console.error(err);
+            } finally {
+                this.addRepeaterLoading = false;
+            }
+        },
+
+        async toggleRepeater(repeater) {
+            if (repeater.enabled) {
+                await this.disableRepeater(repeater);
+            } else {
+                await this.enableRepeater(repeater);
+            }
+        },
+
+        async enableRepeater(repeater) {
+            const idx = this.repeaters.findIndex(r => r.id === repeater.id);
+            if (idx === -1) return;
+            this.repeaters[idx] = { ...this.repeaters[idx], _toggling: true };
+
+            const token = localStorage.getItem('api_token');
+            try {
+                const response = await fetch(`${API_BASE}/api/repeaters/${repeater.id}/enable`, {
+                    method: 'POST',
+                    headers: { 'x-api-token': token }
+                });
+
+                if (response.status === 401) { this.handleUnauthorized(); return; }
+
+                if (response.ok) {
+                    this.repeaters[idx] = { ...this.repeaters[idx], enabled: true, _toggling: false };
+                } else {
+                    console.error('Failed to enable repeater', repeater.name);
+                    this.repeaters[idx] = { ...this.repeaters[idx], _toggling: false };
+                }
+            } catch (err) {
+                console.error(err);
+                this.repeaters[idx] = { ...this.repeaters[idx], _toggling: false };
+            }
+        },
+
+        async disableRepeater(repeater) {
+            const idx = this.repeaters.findIndex(r => r.id === repeater.id);
+            if (idx === -1) return;
+            this.repeaters[idx] = { ...this.repeaters[idx], _toggling: true };
+
+            const token = localStorage.getItem('api_token');
+            try {
+                const response = await fetch(`${API_BASE}/api/repeaters/${repeater.id}/disable`, {
+                    method: 'POST',
+                    headers: { 'x-api-token': token }
+                });
+
+                if (response.status === 401) { this.handleUnauthorized(); return; }
+
+                if (response.ok) {
+                    this.repeaters[idx] = { ...this.repeaters[idx], enabled: false, _toggling: false };
+                } else {
+                    console.error('Failed to disable repeater', repeater.name);
+                    this.repeaters[idx] = { ...this.repeaters[idx], _toggling: false };
+                }
+            } catch (err) {
+                console.error(err);
+                this.repeaters[idx] = { ...this.repeaters[idx], _toggling: false };
             }
         },
 
