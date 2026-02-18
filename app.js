@@ -31,6 +31,7 @@ function app() {
         wsAuthenticated: false,
         newMessage: '',
         sending: false,
+        MSG_MAX_BYTES: 129,
         darkMode: false,
         currentPage: 'messages',
         repeaters: [],
@@ -705,6 +706,7 @@ y1: {
 
         async sendMessage() {
             if (!this.newMessage.trim() || this.sending) return;
+            if (this.msgByteCount() > this.MSG_MAX_BYTES) return;
             
             this.sending = true;
             const token = localStorage.getItem('api_token');
@@ -756,6 +758,10 @@ y1: {
             this.focusInput();
         },
 
+        msgByteCount() {
+            return new TextEncoder().encode(this.newMessage).length;
+        },
+
         focusInput() {
             const input = this.$refs.messageInput;
             if (input) {
@@ -801,6 +807,11 @@ y1: {
                 /(https:\/\/[^\s<>"]+)/g,
                 '<a href="$1" target="_blank" rel="noopener noreferrer" class="underline underline-offset-2 opacity-90 hover:opacity-100 break-all">$1</a>'
             );
+        },
+
+        extractImageUrls(text) {
+            const matches = text.match(/https:\/\/[^\s<>"]+\.(?:png|jpg|jpeg|gif|webp)(?:\?[^\s<>"]*)?/gi);
+            return matches || [];
         },
 
         isMyMessage(msg) {

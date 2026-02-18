@@ -198,6 +198,19 @@
                                             : 'text-xs px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400'" x-text="msg.hops + ' hops'"></span>
                                     </div>
                                     <p :class="isMyMessage(msg) ? 'text-white pl-11' : 'text-gray-700 dark:text-gray-300 pl-11'" x-html="linkifyText(msg.text)"></p>
+                                    <template x-for="imgUrl in extractImageUrls(msg.text)" :key="imgUrl">
+                                        <div class="pl-11 mt-2">
+                                            <a :href="imgUrl" target="_blank" rel="noopener noreferrer">
+                                                <img
+                                                    :src="imgUrl"
+                                                    :alt="imgUrl"
+                                                    loading="lazy"
+                                                    class="rounded-lg max-w-[300px] max-h-[300px] object-contain cursor-pointer opacity-95 hover:opacity-100 transition-opacity duration-150"
+                                                    @error="$el.parentElement.style.display='none'"
+                                                />
+                                            </a>
+                                        </div>
+                                    </template>
                                     <div x-show="!isMyMessage(msg)" class="flex justify-end mt-1">
                                         <button
                                             @click="replyTo(msg.sender)"
@@ -221,18 +234,30 @@
                     <!-- Message Input -->
                     <div class="bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 p-4 transition-colors">
                         <div class="flex gap-3">
-                            <input 
-                                type="text" 
-                                x-ref="messageInput"
-                                x-model="newMessage" 
-                                @keydown.enter="sendMessage()"
-                                :placeholder="'Message ' + selectedChannel"
-                                :disabled="sending"
-                                class="flex-1 px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all outline-none disabled:opacity-50"
-                            />
+                            <div class="relative flex-1">
+                                <input 
+                                    type="text" 
+                                    x-ref="messageInput"
+                                    x-model="newMessage" 
+                                    @keydown.enter="sendMessage()"
+                                    :placeholder="'Message ' + selectedChannel"
+                                    :disabled="sending"
+                                    :class="msgByteCount() > MSG_MAX_BYTES ? 'border-red-400 dark:border-red-500 focus:ring-red-400' : 'border-gray-300 dark:border-gray-600 focus:ring-indigo-500'"
+                                    class="w-full pl-4 pr-16 py-3 rounded-xl border bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:ring-2 focus:border-transparent transition-all outline-none disabled:opacity-50"
+                                />
+                                <span
+                                    class="absolute right-3 top-1/2 -translate-y-1/2 text-xs tabular-nums pointer-events-none select-none"
+                                    :class="msgByteCount() > MSG_MAX_BYTES
+                                        ? 'text-red-500 dark:text-red-400 font-semibold'
+                                        : msgByteCount() > MSG_MAX_BYTES * 0.85
+                                            ? 'text-yellow-500 dark:text-yellow-400'
+                                            : 'text-gray-400 dark:text-gray-500'"
+                                    x-text="msgByteCount() + '/' + MSG_MAX_BYTES"
+                                ></span>
+                            </div>
                             <button 
                                 @click="sendMessage()" 
-                                :disabled="!newMessage.trim() || sending"
+                                :disabled="!newMessage.trim() || sending || msgByteCount() > MSG_MAX_BYTES"
                                 class="px-6 py-3 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white font-semibold rounded-xl shadow-lg transform transition-all duration-200 hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
                             >
                                 <span x-show="!sending">Send</span>
