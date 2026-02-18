@@ -573,7 +573,10 @@ function app() {
         },
 
         formatTelemetryTime(ts) {
-            const d = new Date(ts);
+            const normalised = (ts && !/[Zz]$/.test(ts) && !/[+-]\d{2}:?\d{2}$/.test(ts))
+                ? String(ts).replace(' ', 'T') + 'Z'
+                : ts;
+            const d = new Date(normalised);
             return d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0');
         },
 
