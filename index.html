@@ -355,6 +355,139 @@
                         </form>
                     </div>
                 </div>
+
+                <!-- Edit Repeater Modal -->
+                <div
+                    x-show="showEditRepeaterModal"
+                    x-transition:enter="transition ease-out duration-150"
+                    x-transition:enter-start="opacity-0"
+                    x-transition:enter-end="opacity-100"
+                    x-transition:leave="transition ease-in duration-100"
+                    x-transition:leave-start="opacity-100"
+                    x-transition:leave-end="opacity-0"
+                    class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+                    @keydown.escape.window="showEditRepeaterModal = false"
+                    @click.self="showEditRepeaterModal = false"
+                >
+                    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-md mx-4 p-6">
+                        <div class="flex items-center justify-between mb-5">
+                            <h4 class="text-lg font-semibold text-gray-800 dark:text-white">Edit Repeater</h4>
+                            <button @click="showEditRepeaterModal = false" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/>
+                                </svg>
+                            </button>
+                        </div>
+                        <form @submit.prevent="updateRepeater()">
+                            <div class="space-y-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Repeater Name</label>
+                                    <input
+                                        type="text"
+                                        x-model="editRepeaterForm.name"
+                                        placeholder="e.g. Rooftop Node A"
+                                        required
+                                        class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 text-gray-800 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                    />
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Public Key</label>
+                                    <input
+                                        type="text"
+                                        x-model="editRepeaterForm.publicKey"
+                                        placeholder="Repeater public key"
+                                        required
+                                        class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 text-gray-800 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                    />
+                                </div>
+                                <div x-show="editRepeaterError" class="text-sm text-red-600 dark:text-red-400" x-text="editRepeaterError"></div>
+                            </div>
+                            <div class="flex gap-3 mt-6">
+                                <button
+                                    type="button"
+                                    @click="showEditRepeaterModal = false; confirmDeleteRepeater(editRepeaterForm)"
+                                    class="flex items-center gap-1.5 px-3 py-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 text-sm font-medium rounded-lg transition-colors"
+                                    title="Delete this repeater"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                                        <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                                    </svg>
+                                    Delete
+                                </button>
+                                <div class="flex gap-3 flex-1">
+                                    <button
+                                        type="button"
+                                        @click="showEditRepeaterModal = false"
+                                        class="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 text-sm font-medium rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        :disabled="editRepeaterLoading"
+                                        class="flex-1 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+                                    >
+                                        <svg x-show="editRepeaterLoading" class="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle>
+                                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                        </svg>
+                                        <span x-text="editRepeaterLoading ? 'Saving...' : 'Save'"></span>
+                                    </button>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Delete Confirmation Modal -->
+                <div
+                    x-show="showDeleteRepeaterModal"
+                    x-transition:enter="transition ease-out duration-150"
+                    x-transition:enter-start="opacity-0"
+                    x-transition:enter-end="opacity-100"
+                    x-transition:leave="transition ease-in duration-100"
+                    x-transition:leave-start="opacity-100"
+                    x-transition:leave-end="opacity-0"
+                    class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+                    @keydown.escape.window="showDeleteRepeaterModal = false"
+                    @click.self="showDeleteRepeaterModal = false"
+                >
+                    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-sm mx-4 p-6">
+                        <div class="flex items-center gap-3 mb-4">
+                            <div class="flex-shrink-0 w-10 h-10 rounded-full bg-red-100 dark:bg-red-900/40 flex items-center justify-center">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-red-600 dark:text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                                </svg>
+                            </div>
+                            <div>
+                                <h4 class="text-base font-semibold text-gray-800 dark:text-white">Delete Repeater</h4>
+                                <p class="text-sm text-gray-500 dark:text-gray-400">
+                                    Delete <span class="font-medium text-gray-700 dark:text-gray-300" x-text="deleteRepeaterTarget ? deleteRepeaterTarget.name : ''"></span>? This cannot be undone.
+                                </p>
+                            </div>
+                        </div>
+                        <div class="flex gap-3">
+                            <button
+                                @click="showDeleteRepeaterModal = false"
+                                class="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 text-sm font-medium rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                @click="deleteRepeater()"
+                                :disabled="deleteRepeaterLoading"
+                                class="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+                            >
+                                <svg x-show="deleteRepeaterLoading" class="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle>
+                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                                <span x-text="deleteRepeaterLoading ? 'Deleting...' : 'Delete'"></span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="flex-1 overflow-y-auto p-6">
                     <div x-show="repeatersLoading" class="flex justify-center py-12">
                         <svg class="animate-spin h-10 w-10 text-indigo-500" viewBox="0 0 24 24">
@@ -368,9 +501,22 @@
                     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                         <template x-for="repeater in repeaters" :key="repeater.id">
                             <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-5 transition-colors">
-                                <!-- Card header: name + enabled/disabled badge -->
+                                <!-- Card header: name + edit | enabled/disabled badge -->
                                 <div class="flex items-start justify-between mb-3 gap-2">
-                                    <h4 class="font-semibold text-gray-800 dark:text-white" x-text="repeater.name"></h4>
+                                    <!-- Left: name + edit icon -->
+                                    <div class="flex items-center gap-1 flex-1 min-w-0">
+                                        <h4 class="font-semibold text-gray-800 dark:text-white truncate" x-text="repeater.name"></h4>
+                                        <button
+                                            @click="openEditRepeaterModal(repeater)"
+                                            title="Edit repeater"
+                                            class="flex-shrink-0 p-1 rounded text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                                        >
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+                                                <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"/>
+                                            </svg>
+                                        </button>
+                                    </div>
+                                    <!-- Right: enabled/disabled badge -->
                                     <button
                                         @click="toggleRepeater(repeater)"
                                         :disabled="repeater._toggling"
@@ -380,7 +526,6 @@
                                             ? 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400 hover:bg-green-200 dark:hover:bg-green-900/60'
                                             : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'"
                                     >
-                                        <!-- Enabled dot -->
                                         <span
                                             class="inline-block w-1.5 h-1.5 rounded-full"
                                             :class="repeater.enabled ? 'bg-green-500' : 'bg-gray-400 dark:bg-gray-500'"

@@ -41,6 +41,13 @@ function app() {
         addRepeaterLoading: false,
         addRepeaterError: null,
         newRepeaterForm: { name: '', publicKey: '' },
+        showEditRepeaterModal: false,
+        editRepeaterLoading: false,
+        editRepeaterError: null,
+        editRepeaterForm: { id: null, name: '', publicKey: '' },
+        showDeleteRepeaterModal: false,
+        deleteRepeaterLoading: false,
+        deleteRepeaterTarget: null,
         // tab visibility tracking
         _docHidden: false,
         _hiddenUnread: 0,
@@ -276,7 +283,8 @@ function app() {
                     ...r,
                     telemetry: null,
                     currentBattery: null,
-                    _toggling: false
+                    _toggling: false,
+                    _deleting: false
                 }));
                 
                 await Promise.all(this.repeaters.map(r => this.fetchRepeaterTelemetry(r)));
@@ -326,6 +334,105 @@ function app() {
                 console.error(err);
             } finally {
                 this.addRepeaterLoading = false;
+            }
+        },
+
+        openEditRepeaterModal(repeater) {
+            this.editRepeaterError = null;
+            this.editRepeaterForm = {
+                id: repeater.id,
+                name: repeater.name,
+                publicKey: repeater.public_key || ''
+            };
+            this.showEditRepeaterModal = true;
+        },
+
+        async updateRepeater() {
+            this.editRepeaterError = null;
+            this.editRepeaterLoading = true;
+            const token = localStorage.getItem('api_token');
+
+            try {
+                const response = await fetch(`${API_BASE}/api/repeaters/${this.editRepeaterForm.id}`, {
+                    method: 'PATCH',
+                    headers: {
+                        'content-type': 'application/json',
+                        'x-api-token': token
+                    },
+                    body: JSON.stringify({
+                        name: this.editRepeaterForm.name,
+                        public_key: this.editRepeaterForm.publicKey
+                    })
+                });
+
+                if (response.status === 401) {
+                    this.handleUnauthorized();
+                    return;
+                }
+
+                if (!response.ok) {
+                    const err = await response.json().catch(() => ({}));
+                    this.editRepeaterError = err.message || 'Failed to update repeater';
+                    return;
+                }
+
+                // Update the card in-place so the UI refreshes instantly
+                const idx = this.repeaters.findIndex(r => r.id === this.editRepeaterForm.id);
+                if (idx !== -1) {
+                    this.repeaters[idx] = {
+                        ...this.repeaters[idx],
+                        name: this.editRepeaterForm.name,
+                        public_key: this.editRepeaterForm.publicKey
+                    };
+                }
+                this.showEditRepeaterModal = false;
+            } catch (err) {
+                this.editRepeaterError = 'Network error — please try again';
+                console.error(err);
+            } finally {
+                this.editRepeaterLoading = false;
+            }
+        },
+
+        confirmDeleteRepeater(repeater) {
+            this.deleteRepeaterTarget = repeater;
+            this.showDeleteRepeaterModal = true;
+        },
+
+        async deleteRepeater() {
+            if (!this.deleteRepeaterTarget) return;
+            this.deleteRepeaterLoading = true;
+            const token = localStorage.getItem('api_token');
+            const id = this.deleteRepeaterTarget.id;
+
+            // Mark card as deleting for visual feedback
+            const idx = this.repeaters.findIndex(r => r.id === id);
+            if (idx !== -1) this.repeaters[idx] = { ...this.repeaters[idx], _deleting: true };
+
+            try {
+                const response = await fetch(`${API_BASE}/api/repeaters/${id}`, {
+                    method: 'DELETE',
+                    headers: { 'x-api-token': token }
+                });
+
+                if (response.status === 401) {
+                    this.handleUnauthorized();
+                    return;
+                }
+
+                if (response.ok) {
+                    this.repeaters = this.repeaters.filter(r => r.id !== id);
+                    this.showDeleteRepeaterModal = false;
+                    this.deleteRepeaterTarget = null;
+                } else {
+                    console.error('Failed to delete repeater');
+                    if (idx !== -1) this.repeaters[idx] = { ...this.repeaters[idx], _deleting: false };
+                }
+            } catch (err) {
+                console.error(err);
+                if (idx !== -1) this.repeaters[idx] = { ...this.repeaters[idx], _deleting: false };
+            } finally {
+                this.deleteRepeaterLoading = false;
             }
         },
 
