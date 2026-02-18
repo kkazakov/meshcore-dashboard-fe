@@ -342,7 +342,8 @@ function app() {
             this.editRepeaterForm = {
                 id: repeater.id,
                 name: repeater.name,
-                publicKey: repeater.public_key || ''
+                publicKey: repeater.public_key || '',
+                password: repeater.password || ''
             };
             this.showEditRepeaterModal = true;
         },
@@ -361,7 +362,8 @@ function app() {
                     },
                     body: JSON.stringify({
                         name: this.editRepeaterForm.name,
-                        public_key: this.editRepeaterForm.publicKey
+                        public_key: this.editRepeaterForm.publicKey,
+                        password: this.editRepeaterForm.password
                     })
                 });
 
@@ -382,7 +384,8 @@ function app() {
                     this.repeaters[idx] = {
                         ...this.repeaters[idx],
                         name: this.editRepeaterForm.name,
-                        public_key: this.editRepeaterForm.publicKey
+                        public_key: this.editRepeaterForm.publicKey,
+                        password: this.editRepeaterForm.password
                     };
                 }
                 this.showEditRepeaterModal = false;
