@@ -582,7 +582,6 @@ y1: {
             this.wsAuthenticated = false;
 
             ws.onopen = () => {
-                console.log('[WS] connected, sending auth');
                 ws.send(JSON.stringify({ type: 'auth', token }));
             };
 
@@ -594,14 +593,19 @@ y1: {
                     return;
                 }
 
-                if (message.type === 'welcome') {
-                    // Only reset back-off once the server has accepted the auth
+                const msgType = (message.type || '').trim();
+
+                if (msgType === 'welcome') {
                     this.wsReconnectDelay = 1000;
                     this.wsAuthenticated = true;
                     return;
                 }
 
-                if (message.type === 'new_message' && message.data) {
+                if (msgType === 'ping') {
+                    return;
+                }
+
+                if (msgType === 'new_message' && message.data) {
                     this._handleWsMessage(message.data);
                 }
             };
