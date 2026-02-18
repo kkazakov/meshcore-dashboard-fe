@@ -781,19 +781,12 @@ y1: {
         },
 
         formatTime(ts) {
-            // Normalise: if ts already ends with Z or contains a timezone offset, use as-is.
-            // Otherwise append Z to treat the bare datetime string as UTC.
-            let normalised = ts;
-            if (ts && !/[Zz]$/.test(ts) && !/[+-]\d{2}:?\d{2}$/.test(ts)) {
-                // Replace space separator with T for strict ISO 8601 compatibility
-                normalised = ts.replace(' ', 'T') + 'Z';
-            } else if (ts && / /.test(ts)) {
-                normalised = ts.replace(' ', 'T');
-            }
-            const date = new Date(normalised);
-            console.debug('[formatTime] raw ts:', JSON.stringify(ts), '→ normalised:', JSON.stringify(normalised), '→ parsed:', date.toString());
-            return date.toLocaleTimeString('en-GB', { 
-                hour: '2-digit', 
+            // Append Z if no timezone is present to ensure UTC parsing
+            const normalised = (ts && !/[Zz]$/.test(ts) && !/[+-]\d{2}:?\d{2}$/.test(ts))
+                ? ts.replace(' ', 'T') + 'Z'
+                : ts;
+            return new Date(normalised).toLocaleTimeString('en-GB', {
+                hour: '2-digit',
                 minute: '2-digit',
                 hour12: false
             });
