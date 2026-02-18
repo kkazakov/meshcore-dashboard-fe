@@ -76,10 +76,14 @@ function app() {
             this._visibilityHandler = () => {
                 this._docHidden = document.hidden;
                 if (!document.hidden) {
-                    // Tab became visible — flush queue for current channel and reset unread
+                    // Tab became visible — flush in-memory queue, then do a REST sync
+                    // to catch any messages the WebSocket may have missed while hidden.
                     this._flushQueueForCurrentChannel();
                     this._hiddenUnread = 0;
                     document.title = this._originalTitle;
+                    if (this.view === 'dashboard' && this.currentPage === 'messages') {
+                        this.fetchMessages();
+                    }
                 }
             };
             document.addEventListener('visibilitychange', this._visibilityHandler);
@@ -767,7 +771,17 @@ y1: {
         },
 
         formatTime(ts) {
-            const date = new Date(ts + 'Z');
+            // Normalise: if ts already ends with Z or contains a timezone offset, use as-is.
+            // Otherwise append Z to treat the bare datetime string as UTC.
+            let normalised = ts;
+            if (ts && !/[Zz]$/.test(ts) && !/[+-]\d{2}:?\d{2}$/.test(ts)) {
+                // Replace space separator with T for strict ISO 8601 compatibility
+                normalised = ts.replace(' ', 'T') + 'Z';
+            } else if (ts && / /.test(ts)) {
+                normalised = ts.replace(' ', 'T');
+            }
+            const date = new Date(normalised);
+            console.debug('[formatTime] raw ts:', JSON.stringify(ts), '→ normalised:', JSON.stringify(normalised), '→ parsed:', date.toString());
             return date.toLocaleTimeString('en-GB', { 
                 hour: '2-digit', 
                 minute: '2-digit',
@@ -775,8 +789,38 @@ y1: {
             });
         },
 
+        linkifyText(text) {
+            // Escape HTML special chars first to prevent XSS
+            const escaped = text
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+            // Replace https:// URLs with clickable links
+            return escaped.replace(
+                /(https:\/\/[^\s<>"]+)/g,
+                '<a href="$1" target="_blank" rel="noopener noreferrer" class="underline underline-offset-2 opacity-90 hover:opacity-100 break-all">$1</a>'
+            );
+        },
+
         isMyMessage(msg) {
             return msg.sender === this.user.deviceName;
+        },
+
+        replyTo(sender) {
+            const prefix = `@[${sender}] `;
+            // Avoid duplicating the prefix if already present
+            if (!this.newMessage.startsWith(prefix)) {
+                this.newMessage = prefix + this.newMessage;
+            }
+            this.$nextTick(() => {
+                const input = this.$refs.messageInput;
+                if (input) {
+                    input.focus();
+                    // Move cursor to end
+                    input.selectionStart = input.selectionEnd = input.value.length;
+                }
+            });
         },
 
         logout() {

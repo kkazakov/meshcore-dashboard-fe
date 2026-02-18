@@ -197,7 +197,13 @@
                                             ? 'text-xs px-2 py-0.5 rounded-full bg-white/20 text-white' 
                                             : 'text-xs px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400'" x-text="msg.hops + ' hops'"></span>
                                     </div>
-                                    <p :class="isMyMessage(msg) ? 'text-white pl-11' : 'text-gray-700 dark:text-gray-300 pl-11'" x-text="msg.text"></p>
+                                    <p :class="isMyMessage(msg) ? 'text-white pl-11' : 'text-gray-700 dark:text-gray-300 pl-11'" x-html="linkifyText(msg.text)"></p>
+                                    <div x-show="!isMyMessage(msg)" class="flex justify-end mt-1">
+                                        <button
+                                            @click="replyTo(msg.sender)"
+                                            class="text-xs text-gray-400 dark:text-gray-500 hover:text-indigo-500 dark:hover:text-indigo-400 transition-colors duration-150"
+                                        >Reply</button>
+                                    </div>
                                 </div>
                             </div>
                         </template>
