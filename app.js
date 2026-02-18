@@ -169,6 +169,16 @@ function app() {
 
         loadChannelFromUrl() {
             const hash = window.location.hash;
+            // Check for tab anchors first
+            if (hash === '#telemetry') {
+                this.switchPage('telemetry');
+                return;
+            }
+            if (hash === '#configuration') {
+                this.switchPage('configuration');
+                return;
+            }
+            // Fall back to channel anchor for the messages tab
             const match = hash.match(/#channel-(\d+)/);
             if (match) {
                 const index = parseInt(match[1], 10);
@@ -752,6 +762,13 @@ y1: {
 
         switchPage(page) {
             this.currentPage = page;
+            // Update URL anchor to reflect the active tab
+            if (page === 'messages') {
+                // Restore the channel anchor for the messages tab
+                this.updateUrl();
+            } else {
+                window.location.hash = page;
+            }
             if (page === 'telemetry' && this.repeaters.length === 0) {
                 this.fetchRepeaters();
             } else if (page === 'telemetry' && this.repeaters.length > 0) {
