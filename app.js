@@ -32,6 +32,8 @@ function app() {
         newMessage: '',
         sending: false,
         MSG_MAX_BYTES: 129,
+        messagesLoadingMore: false,
+        messagesAllLoaded: false,
         darkMode: false,
         currentPage: 'messages',
         repeaters: [],
@@ -777,6 +779,7 @@ y1: {
 
         async fetchMessages() {
             this.messagesLoading = true;
+            this.messagesAllLoaded = false;
             const wasAtBottom = this._isAtBottom();
             const token = localStorage.getItem('api_token');
             
@@ -800,6 +803,9 @@ y1: {
                 if (this.messages.length > 0) {
                     this.lastMessageTimestamp = this.messages[this.messages.length - 1].ts;
                 }
+                if (data.count < 100) {
+                    this.messagesAllLoaded = true;
+                }
                 if (wasAtBottom) {
                     this.$nextTick(() => this.scrollToBottom());
                 }
@@ -807,6 +813,47 @@ y1: {
                 console.error(err);
             } finally {
                 this.messagesLoading = false;
+            }
+        },
+
+        async loadMoreMessages() {
+            if (this.messagesLoadingMore || this.messagesAllLoaded) return;
+
+            this.messagesLoadingMore = true;
+            const token = localStorage.getItem('api_token');
+            const offset = this.messages.length;
+
+            try {
+                const response = await fetch(
+                    `${API_BASE}/api/messages?channel=${encodeURIComponent(this.selectedChannel)}&from=${offset}&limit=100&order=desc`,
+                    { headers: { 'x-api-token': token } }
+                );
+
+                if (response.status === 401) { this.handleUnauthorized(); return; }
+                if (!response.ok) throw new Error('Failed to fetch messages');
+
+                const data = await response.json();
+                const older = (data.messages || []).reverse();
+
+                if (older.length === 0 || data.count < 100) {
+                    this.messagesAllLoaded = true;
+                }
+
+                if (older.length > 0) {
+                    const container = this.$refs.messagesContainer;
+                    // Snapshot scroll anchor before prepending so position is preserved
+                    const prevHeight = container ? container.scrollHeight : 0;
+                    this.messages = [...older, ...this.messages];
+                    this.$nextTick(() => {
+                        if (container) {
+                            container.scrollTop = container.scrollHeight - prevHeight;
+                        }
+                    });
+                }
+            } catch (err) {
+                console.error(err);
+            } finally {
+                this.messagesLoadingMore = false;
             }
         },
 
