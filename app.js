@@ -100,13 +100,6 @@ function app() {
                     this._flushQueueForCurrentChannel();
                     this._hiddenUnread = 0;
                     document.title = this._originalTitle;
-                    // Defer the sync fetch so it never races a selectChannel call
-                    // that resets messagesLoading in the same event loop turn.
-                    if (this.view === 'dashboard' && this.currentPage === 'messages') {
-                        setTimeout(() => {
-                            if (!this.messagesLoading) this.fetchMessages();
-                        }, 200);
-                    }
                 }
             };
             document.addEventListener('visibilitychange', this._visibilityHandler);
