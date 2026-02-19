@@ -65,7 +65,12 @@ function app() {
             const userData = localStorage.getItem('user');
             
             if (token && userData) {
-                this.user = JSON.parse(userData);
+                const storedUser = JSON.parse(userData);
+                this.user = { 
+                    email: storedUser.email || '', 
+                    username: storedUser.username || '', 
+                    deviceName: storedUser.deviceName || storedUser.device_name || '' 
+                };
                 const valid = await this.verifyToken();
                 if (valid) {
                     this.view = 'dashboard';
