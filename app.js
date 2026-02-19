@@ -1034,7 +1034,7 @@ y1: {
                 }
 
                 this.newMessage = '';
-                await this.fetchMessages();
+                await this.fetchMessages({ forceScrollToBottom: true });
             } catch (err) {
                 console.error(err);
             } finally {
