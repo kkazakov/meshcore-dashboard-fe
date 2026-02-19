@@ -777,6 +777,7 @@ y1: {
 
         async fetchMessages() {
             this.messagesLoading = true;
+            const wasAtBottom = this._isAtBottom();
             const token = localStorage.getItem('api_token');
             
             try {
@@ -799,7 +800,9 @@ y1: {
                 if (this.messages.length > 0) {
                     this.lastMessageTimestamp = this.messages[this.messages.length - 1].ts;
                 }
-                this.$nextTick(() => this.scrollToBottom());
+                if (wasAtBottom) {
+                    this.$nextTick(() => this.scrollToBottom());
+                }
             } catch (err) {
                 console.error(err);
             } finally {
@@ -914,8 +917,11 @@ y1: {
                 // Message is immediately visible — append directly
                 const existingTs = new Set(this.messages.map(m => m.ts));
                 if (!existingTs.has(msg.ts)) {
+                    const wasAtBottom = this._isAtBottom();
                     this.messages = [...this.messages, msg];
-                    this.$nextTick(() => this.scrollToBottom());
+                    if (wasAtBottom) {
+                        this.$nextTick(() => this.scrollToBottom());
+                    }
                 }
             } else {
                 // Add to display queue for this channel
@@ -1017,6 +1023,13 @@ y1: {
             if (container) {
                 container.scrollTop = container.scrollHeight;
             }
+        },
+
+        _isAtBottom() {
+            const container = this.$refs.messagesContainer;
+            if (!container) return true;
+            // Consider "at bottom" if within 80px of the end
+            return container.scrollHeight - container.scrollTop - container.clientHeight < 80;
         },
 
         formatTime(ts) {
