@@ -4,6 +4,14 @@ A lightweight web frontend for the [Meshcore Dashboard API](https://github.com/k
 
 Built with vanilla HTML, Alpine.js, and Tailwind CSS — no build step required.
 
+## Screenshots
+
+### Messages view
+![Messages view](screenshots/screen-1.png)
+
+### Telemetry view
+![Telemetry view](screenshots/screen-2.png)
+
 ## Requirements
 
 - A running instance of the [Meshcore Dashboard API](https://github.com/kkazakov/meshcore-dashboard-api) — see that repo for hardware setup, ClickHouse configuration, and API deployment instructions.
