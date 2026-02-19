@@ -188,15 +188,23 @@
                         <span class="text-xs text-gray-400 dark:text-gray-500 tabular-nums" x-text="messages.length + ' messages'"></span>
                     </div>
 
+                    <!-- Initial loading spinner — outside scroll container so it never affects scroll layout -->
+                    <div x-show="messagesLoading || !messagesLoaded" class="flex-1 flex items-center justify-center">
+                        <svg class="animate-spin h-8 w-8 text-indigo-500" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                    </div>
+
                     <!-- Messages -->
-                    <div class="flex-1 min-h-0 overflow-y-auto p-6 space-y-4" x-ref="messagesContainer"
-                        @scroll.passive="$el.scrollTop < 80 && loadMoreMessages()">
+                    <div x-show="!messagesLoading && messagesLoaded" class="flex-1 min-h-0 overflow-y-auto p-6 space-y-4" x-ref="messagesContainer"
+                        @scroll.passive="onMessagesScroll($event); $el.scrollTop < 80 && messagesLoaded && !messagesLoading && loadMoreMessages()">
                         <!-- Load more spinner -->
                         <div x-show="messagesLoadingMore" class="flex justify-center py-2">
                             <svg class="animate-spin h-5 w-5 text-indigo-400" viewBox="0 0 24 24">
                                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle>
                                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-            </svg>
+                            </svg>
                         </div>
                         <div x-show="messagesAllLoaded && messages.length > 0" class="text-center text-xs text-gray-400 dark:text-gray-600 py-1">
                             No more messages
@@ -222,12 +230,13 @@
                                     <template x-for="imgUrl in extractImageUrls(msg.text)" :key="imgUrl">
                                         <div class="pl-11 mt-2">
                                             <a :href="imgUrl" target="_blank" rel="noopener noreferrer">
-                                                <img
+                                                 <img
                                                     :src="imgUrl"
                                                     :alt="imgUrl"
                                                     loading="lazy"
                                                     class="rounded-lg max-w-[300px] max-h-[300px] object-contain cursor-pointer opacity-95 hover:opacity-100 transition-opacity duration-150"
                                                     @error="$el.parentElement.style.display='none'"
+                                                    @load="_stickToBottom && scrollToBottom()"
                                                 />
                                             </a>
                                         </div>
@@ -241,15 +250,10 @@
                                 </div>
                             </div>
                         </template>
-                        <div x-show="messages.length === 0 && messagesLoaded && !messagesLoading" class="text-center py-12 text-gray-500 dark:text-gray-400">
+                        <div x-show="messages.length === 0 && messagesLoaded" class="text-center py-12 text-gray-500 dark:text-gray-400">
                             No messages yet
                         </div>
-                        <div x-show="messagesLoading || !messagesLoaded" class="flex justify-center py-8">
-                            <svg class="animate-spin h-8 w-8 text-indigo-500" viewBox="0 0 24 24">
-                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle>
-                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                            </svg>
-                        </div>
+                        <div x-ref="messagesBottom"></div>
                     </div>
 
                     <!-- Message Input -->
