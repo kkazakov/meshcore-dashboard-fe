@@ -55,6 +55,8 @@ function app() {
         _hiddenUnread: 0,
         _originalTitle: 'Meshcore Dashboard',
         _visibilityHandler: null,
+        _stickToBottom: true,
+
 
         async init() {
             this.loadTheme();
@@ -78,7 +80,7 @@ function app() {
                     this.view = 'dashboard';
                     await this.fetchChannels();
                     this.loadChannelFromUrl();
-                    await this.fetchMessages();
+                    await this.fetchMessages({ forceScrollToBottom: true });
                     this.messagesLoaded = true;
                     this.connectWebSocket();
                     this.$nextTick(() => this.focusInput());
@@ -95,13 +97,15 @@ function app() {
             this._visibilityHandler = () => {
                 this._docHidden = document.hidden;
                 if (!document.hidden) {
-                    // Tab became visible — flush in-memory queue, then do a REST sync
-                    // to catch any messages the WebSocket may have missed while hidden.
                     this._flushQueueForCurrentChannel();
                     this._hiddenUnread = 0;
                     document.title = this._originalTitle;
+                    // Defer the sync fetch so it never races a selectChannel call
+                    // that resets messagesLoading in the same event loop turn.
                     if (this.view === 'dashboard' && this.currentPage === 'messages') {
-                        this.fetchMessages();
+                        setTimeout(() => {
+                            if (!this.messagesLoading) this.fetchMessages();
+                        }, 200);
                     }
                 }
             };
@@ -226,7 +230,7 @@ function app() {
                 
                 await this.fetchChannels();
                 this.loadChannelFromUrl();
-                await this.fetchMessages();
+                await this.fetchMessages({ forceScrollToBottom: true });
                 this.messagesLoaded = true;
                 this.connectWebSocket();
                 this.$nextTick(() => this.focusInput());
@@ -256,9 +260,12 @@ function app() {
         async fetchChannels() {
             this.channelsLoading = true;
             const token = localStorage.getItem('api_token');
+            const abort = new AbortController();
+            const timer = setTimeout(() => abort.abort(), 10000);
             try {
                 const response = await fetch(`${API_BASE}/api/channels`, {
-                    headers: { 'x-api-token': token }
+                    headers: { 'x-api-token': token },
+                    signal: abort.signal
                 });
 
                 if (response.status === 401) {
@@ -266,13 +273,14 @@ function app() {
                     return;
                 }
 
-                if (!response.ok) {
-                    throw new Error('Failed to fetch channels');
-                }
+                if (!response.ok) throw new Error('Failed to fetch channels');
 
                 const data = await response.json();
                 this.channels = data.channels || [];
+            } catch (err) {
+                console.error('fetchChannels failed:', err.name === 'AbortError' ? 'timeout' : err);
             } finally {
+                clearTimeout(timer);
                 this.channelsLoading = false;
             }
         },
@@ -782,10 +790,11 @@ y1: {
             }
         },
 
-        async fetchMessages() {
+        async fetchMessages({ forceScrollToBottom = false } = {}) {
+            if (this.messagesLoading) return;
             this.messagesLoading = true;
             this.messagesAllLoaded = false;
-            const wasAtBottom = this._isAtBottom();
+            const shouldScroll = forceScrollToBottom || this._isAtBottom();
             const token = localStorage.getItem('api_token');
             
             try {
@@ -794,35 +803,27 @@ y1: {
                     { headers: { 'x-api-token': token } }
                 );
 
-                if (response.status === 401) {
-                    this.handleUnauthorized();
-                    return;
-                }
-
-                if (!response.ok) {
-                    throw new Error('Failed to fetch messages');
-                }
+                if (response.status === 401) { this.handleUnauthorized(); return; }
+                if (!response.ok) throw new Error('Failed to fetch messages');
 
                 const data = await response.json();
                 this.messages = (data.messages || []).reverse();
                 if (this.messages.length > 0) {
                     this.lastMessageTimestamp = this.messages[this.messages.length - 1].ts;
                 }
-                if (data.count < 100) {
-                    this.messagesAllLoaded = true;
-                }
-                if (wasAtBottom) {
-                    this.$nextTick(() => this.scrollToBottom());
-                }
+                if (data.count < 100) this.messagesAllLoaded = true;
+                // Clear loading flag first so Alpine removes the spinner in the same
+                // batch as the new messages — scrollToBottom then sees the final layout.
+                this.messagesLoading = false;
+                if (shouldScroll) this.$nextTick(() => this.scrollToBottom());
             } catch (err) {
                 console.error(err);
-            } finally {
                 this.messagesLoading = false;
             }
         },
 
         async loadMoreMessages() {
-            if (this.messagesLoadingMore || this.messagesAllLoaded) return;
+            if (this.messagesLoadingMore || this.messagesAllLoaded || this.messagesLoading || !this.messagesLoaded) return;
 
             this.messagesLoadingMore = true;
             const token = localStorage.getItem('api_token');
@@ -971,9 +972,7 @@ y1: {
                 if (!existingTs.has(msg.ts)) {
                     const wasAtBottom = this._isAtBottom();
                     this.messages = [...this.messages, msg];
-                    if (wasAtBottom) {
-                        this.$nextTick(() => this.scrollToBottom());
-                    }
+                    if (wasAtBottom) this.$nextTick(() => this.scrollToBottom());
                 }
             } else {
                 // Add to display queue for this channel
@@ -1050,10 +1049,11 @@ y1: {
             this.messages = [];
             this.lastMessageTimestamp = null;
             this.messagesLoaded = false;
+            this.messagesLoading = false; // reset any in-flight guard so fetchMessages runs
+            this._stickToBottom = true;
             this.updateUrl();
-            this.fetchMessages().then(() => {
+            this.fetchMessages({ forceScrollToBottom: true }).then(() => {
                 this.messagesLoaded = true;
-                // After loading, also flush any queued messages for this channel
                 this._flushQueueForCurrentChannel();
             });
             this.focusInput();
@@ -1071,17 +1071,21 @@ y1: {
         },
 
         scrollToBottom() {
-            const container = this.$refs.messagesContainer;
-            if (container) {
-                container.scrollTop = container.scrollHeight;
+            const el = this.$refs.messagesBottom;
+            if (el) {
+                el.scrollIntoView();
+                this._stickToBottom = true;
             }
         },
 
         _isAtBottom() {
             const container = this.$refs.messagesContainer;
             if (!container) return true;
-            // Consider "at bottom" if within 80px of the end
             return container.scrollHeight - container.scrollTop - container.clientHeight < 80;
+        },
+
+        onMessagesScroll(e) {
+            this._stickToBottom = this._isAtBottom();
         },
 
         formatTime(ts) {
