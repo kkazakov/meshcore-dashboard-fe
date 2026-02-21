@@ -32,6 +32,8 @@ function app() {
         newMessage: '',
         sending: false,
         MSG_MAX_BYTES: 129,
+        messagesLoadingMore: false,
+        messagesAllLoaded: false,
         darkMode: false,
         currentPage: 'messages',
         repeaters: [],
@@ -40,7 +42,7 @@ function app() {
         showAddRepeaterModal: false,
         addRepeaterLoading: false,
         addRepeaterError: null,
-        newRepeaterForm: { name: '', publicKey: '' },
+        newRepeaterForm: { name: '', publicKey: '', password: '' },
         showEditRepeaterModal: false,
         editRepeaterLoading: false,
         editRepeaterError: null,
@@ -48,11 +50,17 @@ function app() {
         showDeleteRepeaterModal: false,
         deleteRepeaterLoading: false,
         deleteRepeaterTarget: null,
+        _polling: false,
+        _pollMessage: null,
+        _pollMessageTimer: null,
+        _telemetryRefreshTimer: null,
         // tab visibility tracking
         _docHidden: false,
         _hiddenUnread: 0,
         _originalTitle: 'Meshcore Dashboard',
         _visibilityHandler: null,
+        _stickToBottom: true,
+
 
         async init() {
             this.loadTheme();
@@ -76,7 +84,7 @@ function app() {
                     this.view = 'dashboard';
                     await this.fetchChannels();
                     this.loadChannelFromUrl();
-                    await this.fetchMessages();
+                    await this.fetchMessages({ forceScrollToBottom: true });
                     this.messagesLoaded = true;
                     this.connectWebSocket();
                     this.$nextTick(() => this.focusInput());
@@ -93,14 +101,9 @@ function app() {
             this._visibilityHandler = () => {
                 this._docHidden = document.hidden;
                 if (!document.hidden) {
-                    // Tab became visible — flush in-memory queue, then do a REST sync
-                    // to catch any messages the WebSocket may have missed while hidden.
                     this._flushQueueForCurrentChannel();
                     this._hiddenUnread = 0;
                     document.title = this._originalTitle;
-                    if (this.view === 'dashboard' && this.currentPage === 'messages') {
-                        this.fetchMessages();
-                    }
                 }
             };
             document.addEventListener('visibilitychange', this._visibilityHandler);
@@ -169,6 +172,16 @@ function app() {
 
         loadChannelFromUrl() {
             const hash = window.location.hash;
+            // Check for tab anchors first
+            if (hash === '#telemetry') {
+                this.switchPage('telemetry');
+                return;
+            }
+            if (hash === '#configuration') {
+                this.switchPage('configuration');
+                return;
+            }
+            // Fall back to channel anchor for the messages tab
             const match = hash.match(/#channel-(\d+)/);
             if (match) {
                 const index = parseInt(match[1], 10);
@@ -214,7 +227,7 @@ function app() {
                 
                 await this.fetchChannels();
                 this.loadChannelFromUrl();
-                await this.fetchMessages();
+                await this.fetchMessages({ forceScrollToBottom: true });
                 this.messagesLoaded = true;
                 this.connectWebSocket();
                 this.$nextTick(() => this.focusInput());
@@ -244,9 +257,12 @@ function app() {
         async fetchChannels() {
             this.channelsLoading = true;
             const token = localStorage.getItem('api_token');
+            const abort = new AbortController();
+            const timer = setTimeout(() => abort.abort(), 10000);
             try {
                 const response = await fetch(`${API_BASE}/api/channels`, {
-                    headers: { 'x-api-token': token }
+                    headers: { 'x-api-token': token },
+                    signal: abort.signal
                 });
 
                 if (response.status === 401) {
@@ -254,13 +270,14 @@ function app() {
                     return;
                 }
 
-                if (!response.ok) {
-                    throw new Error('Failed to fetch channels');
-                }
+                if (!response.ok) throw new Error('Failed to fetch channels');
 
                 const data = await response.json();
                 this.channels = data.channels || [];
+            } catch (err) {
+                console.error('fetchChannels failed:', err.name === 'AbortError' ? 'timeout' : err);
             } finally {
+                clearTimeout(timer);
                 this.channelsLoading = false;
             }
         },
@@ -315,7 +332,8 @@ function app() {
                     },
                     body: JSON.stringify({
                         name: this.newRepeaterForm.name,
-                        public_key: this.newRepeaterForm.publicKey
+                        public_key: this.newRepeaterForm.publicKey,
+                        password: this.newRepeaterForm.password
                     })
                 });
 
@@ -332,7 +350,7 @@ function app() {
 
                 // Close modal, reset form, refresh list
                 this.showAddRepeaterModal = false;
-                this.newRepeaterForm = { name: '', publicKey: '' };
+                this.newRepeaterForm = { name: '', publicKey: '', password: '' };
                 await this.fetchRepeaters();
             } catch (err) {
                 this.addRepeaterError = 'Network error — please try again';
@@ -478,6 +496,34 @@ function app() {
             }
         },
 
+        async pollRepeaters() {
+            this._polling = true;
+            const token = localStorage.getItem('api_token');
+            try {
+                const response = await fetch(`${API_BASE}/api/repeaters/poll`, {
+                    method: 'POST',
+                    headers: { 'x-api-token': token }
+                });
+
+                if (response.status === 401) { this.handleUnauthorized(); return; }
+
+                const data = await response.json().catch(() => ({}));
+                this._showPollMessage(data.message || (response.ok ? 'Poll started' : 'Poll failed'));
+                if (!response.ok) console.error('Failed to poll repeaters');
+            } catch (err) {
+                console.error(err);
+                this._showPollMessage('Network error');
+            } finally {
+                this._polling = false;
+            }
+        },
+
+        _showPollMessage(msg) {
+            this._pollMessage = msg;
+            clearTimeout(this._pollMessageTimer);
+            this._pollMessageTimer = setTimeout(() => { this._pollMessage = null; }, 4000);
+        },
+
         async disableRepeater(repeater) {
             const idx = this.repeaters.findIndex(r => r.id === repeater.id);
             if (idx === -1) return;
@@ -513,7 +559,7 @@ function app() {
             
             try {
                 const response = await fetch(
-                    `${API_BASE}/api/telemetry/history/${repeater.id}?from=${encodeURIComponent(formatDate(from))}&to=${encodeURIComponent(formatDate(to))}&keys=battery_voltage,battery_percentage`,
+                    `${API_BASE}/api/telemetry/history/${repeater.id}?from=${encodeURIComponent(formatDate(from))}&to=${encodeURIComponent(formatDate(to))}&keys=battery_voltage,battery_percentage,temperature_c,pressure_hpa,humidity_pct`,
                     { headers: { 'x-api-token': token } }
                 );
 
@@ -541,13 +587,72 @@ function app() {
             }
         },
 
+        async _refreshTelemetrySilently() {
+            if (!this.repeaters.length) return;
+            await Promise.all(this.repeaters.map(r => this.fetchRepeaterTelemetry(r)));
+            // Patch existing Chart.js instances in-place — no destroy/recreate, no flash
+            this.repeaters.forEach(repeater => {
+                if (!repeater.telemetry) return;
+                const t = repeater.telemetry;
+
+                const batteryChart = this.repeaterCharts[repeater.id];
+                if (batteryChart) {
+                    batteryChart.data.labels = t.labels;
+                    batteryChart.data.datasets.forEach(ds => {
+                        if (ds.label === 'Battery %') ds.data = t.percentage;
+                        else if (ds.label === 'Voltage') ds.data = t.voltage;
+                    });
+                    batteryChart.update('none');
+                }
+
+                const tempChart = this.repeaterCharts[repeater.id + '-temp'];
+                if (tempChart) {
+                    tempChart.data.labels = t.labels;
+                    tempChart.data.datasets.forEach(ds => { if (ds.label === 'Temperature') ds.data = t.temperature; });
+                    tempChart.update('none');
+                }
+
+                const presChart = this.repeaterCharts[repeater.id + '-pres'];
+                if (presChart) {
+                    presChart.data.labels = t.labels;
+                    presChart.data.datasets.forEach(ds => { if (ds.label === 'Pressure') ds.data = t.pressure; });
+                    presChart.update('none');
+                }
+
+                const humChart = this.repeaterCharts[repeater.id + '-hum'];
+                if (humChart) {
+                    humChart.data.labels = t.labels;
+                    humChart.data.datasets.forEach(ds => { if (ds.label === 'Humidity') ds.data = t.humidity; });
+                    humChart.update('none');
+                }
+            });
+        },
+
+        _startTelemetryRefresh() {
+            this._stopTelemetryRefresh();
+            this._telemetryRefreshTimer = setInterval(() => this._refreshTelemetrySilently(), 60_000);
+        },
+
+        _stopTelemetryRefresh() {
+            if (this._telemetryRefreshTimer) {
+                clearInterval(this._telemetryRefreshTimer);
+                this._telemetryRefreshTimer = null;
+            }
+        },
+
         processTelemetryData(data) {
             const voltageRecords = data.data?.battery_voltage || [];
             const percentageRecords = data.data?.battery_percentage || [];
+            const temperatureRecords = data.data?.temperature_c || [];
+            const pressureRecords = data.data?.pressure_hpa || [];
+            const humidityRecords = data.data?.humidity_pct || [];
             
             const allTimes = new Set();
             percentageRecords.forEach(r => allTimes.add(r.date));
             voltageRecords.forEach(r => allTimes.add(r.date));
+            temperatureRecords.forEach(r => allTimes.add(r.date));
+            pressureRecords.forEach(r => allTimes.add(r.date));
+            humidityRecords.forEach(r => allTimes.add(r.date));
             
             const sortedTimes = Array.from(allTimes).sort();
             
@@ -556,9 +661,15 @@ function app() {
             
             const percentageMap = new Map(percentageRecords.map(r => [r.date, parseFloat(r.value)]));
             const voltageMap = new Map(voltageRecords.map(r => [r.date, parseFloat(r.value)]));
+            const temperatureMap = new Map(temperatureRecords.map(r => [r.date, parseFloat(r.value)]));
+            const pressureMap = new Map(pressureRecords.map(r => [r.date, parseFloat(r.value)]));
+            const humidityMap = new Map(humidityRecords.map(r => [r.date, parseFloat(r.value)]));
             
             const percentage = [];
             const voltage = [];
+            const temperature = [];
+            const pressure = [];
+            const humidity = [];
             const labels = [];
             const lastReadingTime = sortedTimes.length > 0 ? sortedTimes[sortedTimes.length - 1] : null;
             const lastReadingFormatted = lastReadingTime ? this.formatLastReadingTime(lastReadingTime) : 'N/A';
@@ -572,9 +683,18 @@ function app() {
                 
                 const volt = voltageMap.get(time);
                 voltage.push(volt != null ? volt : null);
+
+                const temp = temperatureMap.get(time);
+                temperature.push(temp != null ? temp : null);
+
+                const pres = pressureMap.get(time);
+                pressure.push(pres != null ? pres : null);
+
+                const hum = humidityMap.get(time);
+                humidity.push(hum != null ? hum : null);
             }
             
-            return { percentage, voltage, labels, lastReadingTime, lastReadingFormatted };
+            return { percentage, voltage, temperature, pressure, humidity, labels, lastReadingTime, lastReadingFormatted };
         },
 
         formatTelemetryTime(ts) {
@@ -743,6 +863,100 @@ y1: {
                     }
                 });
             });
+            this.renderSensorCharts();
+        },
+
+        _renderSensorChart(canvas, chartKey, label, labels, values, color, unit, tooltipFn, yOptions) {
+            if (!canvas) return;
+            const hasData = values.some(v => v != null);
+            if (!hasData) return;
+
+            const isDark = this.darkMode;
+            const gridColor = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)';
+            const textColor = isDark ? '#9ca3af' : '#6b7280';
+
+            const ctx = canvas.getContext('2d');
+            if (!ctx) return;
+            const gradient = ctx.createLinearGradient(0, 0, 0, 160);
+            const withAlpha = (a) => color.replace(/,\s*1\)$/, `, ${a})`);
+            gradient.addColorStop(0, withAlpha(0.3));
+            gradient.addColorStop(1, withAlpha(0.05));
+
+            // Destroy any stale instance (e.g. after theme toggle)
+            if (this.repeaterCharts[chartKey]) {
+                this.repeaterCharts[chartKey].destroy();
+                delete this.repeaterCharts[chartKey];
+            }
+
+            this.repeaterCharts[chartKey] = new Chart(ctx, {
+                type: 'line',
+                data: { labels, datasets: [{
+                    label,
+                    data: values,
+                    borderColor: color,
+                    backgroundColor: gradient,
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 0,
+                    borderWidth: 2,
+                    spanGaps: true
+                }]},
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: { callbacks: { label: tooltipFn } }
+                    },
+                    scales: {
+                        x: {
+                            display: true,
+                            grid: { display: false },
+                            ticks: { color: textColor, font: { size: 9 }, maxTicksLimit: 5 }
+                        },
+                        y: {
+                            type: 'linear',
+                            display: true,
+                            position: 'left',
+                            grid: { color: gridColor },
+                            ticks: { color: textColor, font: { size: 9 }, maxTicksLimit: 4,
+                                callback: (v) => v + unit },
+                            ...yOptions
+                        }
+                    }
+                }
+            });
+        },
+
+        renderSensorCharts() {
+            this.repeaters.forEach(repeater => {
+                if (!repeater.telemetry) return;
+                const t = repeater.telemetry;
+
+                const renderOne = (suffix, label, values, color, unit, tooltipFn, yOptions) => {
+                    if (!values.some(v => v != null)) return;
+                    const canvas = document.getElementById(`chart-${repeater.id}-${suffix}`);
+                    if (!canvas) return;
+                    this._renderSensorChart(canvas, repeater.id + '-' + suffix, label, t.labels, values, color, unit, tooltipFn, yOptions);
+                };
+
+                renderOne('temp', 'Temperature', t.temperature,
+                    'rgba(249, 115, 22, 1)', '°C',
+                    (c) => `Temp: ${c.parsed.y.toFixed(1)}°C`,
+                    {}
+                );
+                renderOne('pres', 'Pressure', t.pressure,
+                    'rgba(99, 102, 241, 1)', ' hPa',
+                    (c) => `Pressure: ${c.parsed.y.toFixed(1)} hPa`,
+                    {}
+                );
+                renderOne('hum', 'Humidity', t.humidity,
+                    'rgba(14, 165, 233, 1)', '%',
+                    (c) => `Humidity: ${c.parsed.y.toFixed(1)}%`,
+                    { min: 0, max: 100 }
+                );
+            });
         },
 
         destroyCharts() {
@@ -752,19 +966,33 @@ y1: {
 
         switchPage(page) {
             this.currentPage = page;
+            // Update URL anchor to reflect the active tab
+            if (page === 'messages') {
+                // Restore the channel anchor for the messages tab
+                this.updateUrl();
+            } else {
+                window.location.hash = page;
+            }
             if (page === 'telemetry' && this.repeaters.length === 0) {
-                this.fetchRepeaters();
+                this.fetchRepeaters().then(() => this._startTelemetryRefresh());
             } else if (page === 'telemetry' && this.repeaters.length > 0) {
                 this.$nextTick(() => this.renderCharts());
-            } else if (page === 'messages') {
-                this.destroyCharts();
-                // When switching back to messages, flush the queue for the current channel
-                this._flushQueueForCurrentChannel();
+                this._startTelemetryRefresh();
+            } else {
+                this._stopTelemetryRefresh();
+                if (page === 'messages') {
+                    this.destroyCharts();
+                    // When switching back to messages, flush the queue for the current channel
+                    this._flushQueueForCurrentChannel();
+                }
             }
         },
 
-        async fetchMessages() {
+        async fetchMessages({ forceScrollToBottom = false } = {}) {
+            if (this.messagesLoading) return;
             this.messagesLoading = true;
+            this.messagesAllLoaded = false;
+            const shouldScroll = forceScrollToBottom || this._isAtBottom();
             const token = localStorage.getItem('api_token');
             
             try {
@@ -773,25 +1001,63 @@ y1: {
                     { headers: { 'x-api-token': token } }
                 );
 
-                if (response.status === 401) {
-                    this.handleUnauthorized();
-                    return;
-                }
-
-                if (!response.ok) {
-                    throw new Error('Failed to fetch messages');
-                }
+                if (response.status === 401) { this.handleUnauthorized(); return; }
+                if (!response.ok) throw new Error('Failed to fetch messages');
 
                 const data = await response.json();
                 this.messages = (data.messages || []).reverse();
                 if (this.messages.length > 0) {
                     this.lastMessageTimestamp = this.messages[this.messages.length - 1].ts;
                 }
-                this.$nextTick(() => this.scrollToBottom());
+                if (data.count < 100) this.messagesAllLoaded = true;
+                // Clear loading flag first so Alpine removes the spinner in the same
+                // batch as the new messages — scrollToBottom then sees the final layout.
+                this.messagesLoading = false;
+                if (shouldScroll) this.$nextTick(() => this.scrollToBottom());
+            } catch (err) {
+                console.error(err);
+                this.messagesLoading = false;
+            }
+        },
+
+        async loadMoreMessages() {
+            if (this.messagesLoadingMore || this.messagesAllLoaded || this.messagesLoading || !this.messagesLoaded) return;
+
+            this.messagesLoadingMore = true;
+            const token = localStorage.getItem('api_token');
+            const offset = this.messages.length;
+
+            try {
+                const response = await fetch(
+                    `${API_BASE}/api/messages?channel=${encodeURIComponent(this.selectedChannel)}&from=${offset}&limit=100&order=desc`,
+                    { headers: { 'x-api-token': token } }
+                );
+
+                if (response.status === 401) { this.handleUnauthorized(); return; }
+                if (!response.ok) throw new Error('Failed to fetch messages');
+
+                const data = await response.json();
+                const older = (data.messages || []).reverse();
+
+                if (older.length === 0 || data.count < 100) {
+                    this.messagesAllLoaded = true;
+                }
+
+                if (older.length > 0) {
+                    const container = this.$refs.messagesContainer;
+                    // Snapshot scroll anchor before prepending so position is preserved
+                    const prevHeight = container ? container.scrollHeight : 0;
+                    this.messages = [...older, ...this.messages];
+                    this.$nextTick(() => {
+                        if (container) {
+                            container.scrollTop = container.scrollHeight - prevHeight;
+                        }
+                    });
+                }
             } catch (err) {
                 console.error(err);
             } finally {
-                this.messagesLoading = false;
+                this.messagesLoadingMore = false;
             }
         },
 
@@ -902,8 +1168,9 @@ y1: {
                 // Message is immediately visible — append directly
                 const existingTs = new Set(this.messages.map(m => m.ts));
                 if (!existingTs.has(msg.ts)) {
+                    const wasAtBottom = this._isAtBottom();
                     this.messages = [...this.messages, msg];
-                    this.$nextTick(() => this.scrollToBottom());
+                    if (wasAtBottom) this.$nextTick(() => this.scrollToBottom());
                 }
             } else {
                 // Add to display queue for this channel
@@ -930,6 +1197,7 @@ y1: {
 
         handleUnauthorized() {
             this.disconnectWebSocket();
+            this._stopTelemetryRefresh();
             this.destroyCharts();
             this.clearSession();
             this.view = 'login';
@@ -965,7 +1233,6 @@ y1: {
                 }
 
                 this.newMessage = '';
-                await this.fetchMessages();
             } catch (err) {
                 console.error(err);
             } finally {
@@ -980,10 +1247,11 @@ y1: {
             this.messages = [];
             this.lastMessageTimestamp = null;
             this.messagesLoaded = false;
+            this.messagesLoading = false; // reset any in-flight guard so fetchMessages runs
+            this._stickToBottom = true;
             this.updateUrl();
-            this.fetchMessages().then(() => {
+            this.fetchMessages({ forceScrollToBottom: true }).then(() => {
                 this.messagesLoaded = true;
-                // After loading, also flush any queued messages for this channel
                 this._flushQueueForCurrentChannel();
             });
             this.focusInput();
@@ -1001,10 +1269,21 @@ y1: {
         },
 
         scrollToBottom() {
-            const container = this.$refs.messagesContainer;
-            if (container) {
-                container.scrollTop = container.scrollHeight;
+            const el = this.$refs.messagesBottom;
+            if (el) {
+                el.scrollIntoView();
+                this._stickToBottom = true;
             }
+        },
+
+        _isAtBottom() {
+            const container = this.$refs.messagesContainer;
+            if (!container) return true;
+            return container.scrollHeight - container.scrollTop - container.clientHeight < 80;
+        },
+
+        onMessagesScroll(e) {
+            this._stickToBottom = this._isAtBottom();
         },
 
         formatTime(ts) {
@@ -1060,6 +1339,7 @@ y1: {
 
         logout() {
             this.disconnectWebSocket();
+            this._stopTelemetryRefresh();
             this._teardownVisibilityHandler();
             this.destroyCharts();
             this.clearSession();
