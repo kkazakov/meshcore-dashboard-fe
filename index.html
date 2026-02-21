@@ -570,53 +570,122 @@
                     </div>
                     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                         <template x-for="repeater in repeaters" :key="repeater.id">
-                            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-5 transition-colors">
-                                <!-- Card header: name + edit | enabled/disabled badge -->
-                                <div class="flex items-start justify-between mb-3 gap-2">
-                                    <!-- Left: name + edit icon -->
-                                    <div class="flex items-center gap-1 flex-1 min-w-0">
-                                        <h4 class="font-semibold text-gray-800 dark:text-white truncate" x-text="repeater.name"></h4>
-                                        <button
-                                            @click="openEditRepeaterModal(repeater)"
-                                            title="Edit repeater"
-                                            class="flex-shrink-0 p-1 rounded text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-                                        >
-                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
-                                                <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"/>
-                                            </svg>
-                                        </button>
+                            <div class="contents">
+                                    <!-- Battery card -->
+                                    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-5 transition-colors">
+                                        <!-- Card header: name + edit | enabled/disabled badge -->
+                                        <div class="flex items-start justify-between mb-3 gap-2">
+                                            <!-- Left: name + edit icon -->
+                                            <div class="flex items-center gap-1 flex-1 min-w-0">
+                                                <h4 class="font-semibold text-gray-800 dark:text-white truncate" x-text="repeater.name"></h4>
+                                                <button
+                                                    @click="openEditRepeaterModal(repeater)"
+                                                    title="Edit repeater"
+                                                    class="flex-shrink-0 p-1 rounded text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                                                >
+                                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+                                                        <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"/>
+                                                    </svg>
+                                                </button>
+                                            </div>
+                                            <!-- Right: enabled/disabled badge -->
+                                            <button
+                                                @click="toggleRepeater(repeater)"
+                                                :disabled="repeater._toggling"
+                                                :title="repeater.enabled ? 'Monitoring enabled — click to disable' : 'Monitoring disabled — click to enable'"
+                                                class="flex-shrink-0 flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium transition-colors disabled:opacity-50"
+                                                :class="repeater.enabled
+                                                    ? 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400 hover:bg-green-200 dark:hover:bg-green-900/60'
+                                                    : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'"
+                                            >
+                                                <span
+                                                    class="inline-block w-1.5 h-1.5 rounded-full"
+                                                    :class="repeater.enabled ? 'bg-green-500' : 'bg-gray-400 dark:bg-gray-500'"
+                                                ></span>
+                                                <span x-text="repeater._toggling ? '...' : (repeater.enabled ? 'Enabled' : 'Disabled')"></span>
+                                            </button>
+                                        </div>
+                                        <div class="h-40 mb-3">
+                                            <canvas x-show="repeater.telemetry && repeater.telemetry.labels.length > 0" :id="'chart-' + repeater.id"></canvas>
+                                            <div x-show="!repeater.telemetry || repeater.telemetry.labels.length === 0" class="h-full flex items-center justify-center text-gray-400 dark:text-gray-500 text-sm">
+                                                No telemetry data
+                                            </div>
+                                        </div>
+                                        <div class="flex items-center justify-between text-sm">
+                                            <span class="text-gray-600 dark:text-gray-400">Last reading</span>
+                                            <span
+                                                class="font-semibold"
+                                                :class="getBatteryClass(repeater.currentBattery)"
+                                                x-text="repeater.telemetry ? repeater.telemetry.lastReadingFormatted : 'N/A'"
+                                            ></span>
+                                        </div>
                                     </div>
-                                    <!-- Right: enabled/disabled badge -->
-                                    <button
-                                        @click="toggleRepeater(repeater)"
-                                        :disabled="repeater._toggling"
-                                        :title="repeater.enabled ? 'Monitoring enabled — click to disable' : 'Monitoring disabled — click to enable'"
-                                        class="flex-shrink-0 flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium transition-colors disabled:opacity-50"
-                                        :class="repeater.enabled
-                                            ? 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400 hover:bg-green-200 dark:hover:bg-green-900/60'
-                                            : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'"
+
+                                    <!-- Temperature card (only if data exists) -->
+                                    <div
+                                        x-show="repeater.telemetry && repeater.telemetry.temperature && repeater.telemetry.temperature.some(v => v != null)"
+                                        class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-5 transition-colors"
                                     >
-                                        <span
-                                            class="inline-block w-1.5 h-1.5 rounded-full"
-                                            :class="repeater.enabled ? 'bg-green-500' : 'bg-gray-400 dark:bg-gray-500'"
-                                        ></span>
-                                        <span x-text="repeater._toggling ? '...' : (repeater.enabled ? 'Enabled' : 'Disabled')"></span>
-                                    </button>
-                                </div>
-                                <div class="h-40 mb-3">
-                                    <canvas x-show="repeater.telemetry && repeater.telemetry.labels.length > 0" :id="'chart-' + repeater.id"></canvas>
-                                    <div x-show="!repeater.telemetry || repeater.telemetry.labels.length === 0" class="h-full flex items-center justify-center text-gray-400 dark:text-gray-500 text-sm">
-                                        No telemetry data
+                                        <div class="flex items-center gap-2 mb-3">
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-orange-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                <path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"/>
+                                            </svg>
+                                            <h4 class="font-semibold text-gray-800 dark:text-white truncate text-sm" x-text="repeater.name + ' — Temperature'"></h4>
+                                        </div>
+                                        <div class="h-40 mb-3">
+                                            <canvas :id="'chart-' + repeater.id + '-temp'"></canvas>
+                                        </div>
+                                        <div class="flex items-center justify-between text-sm">
+                                            <span class="text-gray-600 dark:text-gray-400">Last reading</span>
+                                            <span class="font-semibold text-orange-600 dark:text-orange-400"
+                                                x-text="repeater.telemetry && repeater.telemetry.temperature ? (repeater.telemetry.temperature.filter(v => v != null).slice(-1)[0]?.toFixed(1) + ' °C') : 'N/A'"
+                                            ></span>
+                                        </div>
                                     </div>
-                                </div>
-                                <div class="flex items-center justify-between text-sm">
-                                    <span class="text-gray-600 dark:text-gray-400">Last reading</span>
-                                    <span
-                                        class="font-semibold"
-                                        :class="getBatteryClass(repeater.currentBattery)"
-                                        x-text="repeater.telemetry ? repeater.telemetry.lastReadingFormatted : 'N/A'"
-                                    ></span>
-                                </div>
+
+                                    <!-- Pressure card (only if data exists) -->
+                                    <div
+                                        x-show="repeater.telemetry && repeater.telemetry.pressure && repeater.telemetry.pressure.some(v => v != null)"
+                                        class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-5 transition-colors"
+                                    >
+                                        <div class="flex items-center gap-2 mb-3">
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-indigo-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                <path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 14v-4m0-4h.01"/>
+                                            </svg>
+                                            <h4 class="font-semibold text-gray-800 dark:text-white truncate text-sm" x-text="repeater.name + ' — Pressure'"></h4>
+                                        </div>
+                                        <div class="h-40 mb-3">
+                                            <canvas :id="'chart-' + repeater.id + '-pres'"></canvas>
+                                        </div>
+                                        <div class="flex items-center justify-between text-sm">
+                                            <span class="text-gray-600 dark:text-gray-400">Last reading</span>
+                                            <span class="font-semibold text-indigo-600 dark:text-indigo-400"
+                                                x-text="repeater.telemetry && repeater.telemetry.pressure ? (repeater.telemetry.pressure.filter(v => v != null).slice(-1)[0]?.toFixed(1) + ' hPa') : 'N/A'"
+                                            ></span>
+                                        </div>
+                                    </div>
+
+                                    <!-- Humidity card (only if data exists) -->
+                                    <div
+                                        x-show="repeater.telemetry && repeater.telemetry.humidity && repeater.telemetry.humidity.some(v => v != null)"
+                                        class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-5 transition-colors"
+                                    >
+                                        <div class="flex items-center gap-2 mb-3">
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-sky-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/>
+                                            </svg>
+                                            <h4 class="font-semibold text-gray-800 dark:text-white truncate text-sm" x-text="repeater.name + ' — Humidity'"></h4>
+                                        </div>
+                                        <div class="h-40 mb-3">
+                                            <canvas :id="'chart-' + repeater.id + '-hum'"></canvas>
+                                        </div>
+                                        <div class="flex items-center justify-between text-sm">
+                                            <span class="text-gray-600 dark:text-gray-400">Last reading</span>
+                                            <span class="font-semibold text-sky-600 dark:text-sky-400"
+                                                x-text="repeater.telemetry && repeater.telemetry.humidity ? (repeater.telemetry.humidity.filter(v => v != null).slice(-1)[0]?.toFixed(1) + ' %') : 'N/A'"
+                                            ></span>
+                                        </div>
+                                    </div>
                             </div>
                         </template>
                     </div>

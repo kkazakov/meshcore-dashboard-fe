@@ -558,7 +558,7 @@ function app() {
             
             try {
                 const response = await fetch(
-                    `${API_BASE}/api/telemetry/history/${repeater.id}?from=${encodeURIComponent(formatDate(from))}&to=${encodeURIComponent(formatDate(to))}&keys=battery_voltage,battery_percentage`,
+                    `${API_BASE}/api/telemetry/history/${repeater.id}?from=${encodeURIComponent(formatDate(from))}&to=${encodeURIComponent(formatDate(to))}&keys=battery_voltage,battery_percentage,temperature_c,pressure_hpa,humidity_pct`,
                     { headers: { 'x-api-token': token } }
                 );
 
@@ -591,15 +591,39 @@ function app() {
             await Promise.all(this.repeaters.map(r => this.fetchRepeaterTelemetry(r)));
             // Patch existing Chart.js instances in-place — no destroy/recreate, no flash
             this.repeaters.forEach(repeater => {
-                const chart = this.repeaterCharts[repeater.id];
-                if (!chart || !repeater.telemetry) return;
+                if (!repeater.telemetry) return;
                 const t = repeater.telemetry;
-                chart.data.labels = t.labels;
-                chart.data.datasets.forEach(ds => {
-                    if (ds.label === 'Battery %') ds.data = t.percentage;
-                    else if (ds.label === 'Voltage') ds.data = t.voltage;
-                });
-                chart.update('none'); // 'none' disables animation
+
+                const batteryChart = this.repeaterCharts[repeater.id];
+                if (batteryChart) {
+                    batteryChart.data.labels = t.labels;
+                    batteryChart.data.datasets.forEach(ds => {
+                        if (ds.label === 'Battery %') ds.data = t.percentage;
+                        else if (ds.label === 'Voltage') ds.data = t.voltage;
+                    });
+                    batteryChart.update('none');
+                }
+
+                const tempChart = this.repeaterCharts[repeater.id + '-temp'];
+                if (tempChart) {
+                    tempChart.data.labels = t.labels;
+                    tempChart.data.datasets.forEach(ds => { if (ds.label === 'Temperature') ds.data = t.temperature; });
+                    tempChart.update('none');
+                }
+
+                const presChart = this.repeaterCharts[repeater.id + '-pres'];
+                if (presChart) {
+                    presChart.data.labels = t.labels;
+                    presChart.data.datasets.forEach(ds => { if (ds.label === 'Pressure') ds.data = t.pressure; });
+                    presChart.update('none');
+                }
+
+                const humChart = this.repeaterCharts[repeater.id + '-hum'];
+                if (humChart) {
+                    humChart.data.labels = t.labels;
+                    humChart.data.datasets.forEach(ds => { if (ds.label === 'Humidity') ds.data = t.humidity; });
+                    humChart.update('none');
+                }
             });
         },
 
@@ -618,10 +642,16 @@ function app() {
         processTelemetryData(data) {
             const voltageRecords = data.data?.battery_voltage || [];
             const percentageRecords = data.data?.battery_percentage || [];
+            const temperatureRecords = data.data?.temperature_c || [];
+            const pressureRecords = data.data?.pressure_hpa || [];
+            const humidityRecords = data.data?.humidity_pct || [];
             
             const allTimes = new Set();
             percentageRecords.forEach(r => allTimes.add(r.date));
             voltageRecords.forEach(r => allTimes.add(r.date));
+            temperatureRecords.forEach(r => allTimes.add(r.date));
+            pressureRecords.forEach(r => allTimes.add(r.date));
+            humidityRecords.forEach(r => allTimes.add(r.date));
             
             const sortedTimes = Array.from(allTimes).sort();
             
@@ -630,9 +660,15 @@ function app() {
             
             const percentageMap = new Map(percentageRecords.map(r => [r.date, parseFloat(r.value)]));
             const voltageMap = new Map(voltageRecords.map(r => [r.date, parseFloat(r.value)]));
+            const temperatureMap = new Map(temperatureRecords.map(r => [r.date, parseFloat(r.value)]));
+            const pressureMap = new Map(pressureRecords.map(r => [r.date, parseFloat(r.value)]));
+            const humidityMap = new Map(humidityRecords.map(r => [r.date, parseFloat(r.value)]));
             
             const percentage = [];
             const voltage = [];
+            const temperature = [];
+            const pressure = [];
+            const humidity = [];
             const labels = [];
             const lastReadingTime = sortedTimes.length > 0 ? sortedTimes[sortedTimes.length - 1] : null;
             const lastReadingFormatted = lastReadingTime ? this.formatLastReadingTime(lastReadingTime) : 'N/A';
@@ -646,9 +682,18 @@ function app() {
                 
                 const volt = voltageMap.get(time);
                 voltage.push(volt != null ? volt : null);
+
+                const temp = temperatureMap.get(time);
+                temperature.push(temp != null ? temp : null);
+
+                const pres = pressureMap.get(time);
+                pressure.push(pres != null ? pres : null);
+
+                const hum = humidityMap.get(time);
+                humidity.push(hum != null ? hum : null);
             }
             
-            return { percentage, voltage, labels, lastReadingTime, lastReadingFormatted };
+            return { percentage, voltage, temperature, pressure, humidity, labels, lastReadingTime, lastReadingFormatted };
         },
 
         formatTelemetryTime(ts) {
@@ -816,6 +861,108 @@ y1: {
                         }
                     }
                 });
+            });
+            this.$nextTick(() => this.renderSensorCharts());
+        },
+
+        _renderSensorChart(canvasId, chartKey, label, values, color, unit, tooltipFn, yOptions) {
+            const canvas = document.getElementById(canvasId);
+            if (!canvas) return;
+            const hasData = values.some(v => v != null);
+            if (!hasData) return;
+
+            const isDark = this.darkMode;
+            const gridColor = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)';
+            const textColor = isDark ? '#9ca3af' : '#6b7280';
+
+            // labels are passed in via canvasId look-up so we pull from the chart data already set
+            // We receive labels separately — see callers
+            const ctx = canvas.getContext('2d');
+            const gradient = ctx.createLinearGradient(0, 0, 0, 160);
+            // Replace the alpha at the end of rgba(..., 1) safely
+            const withAlpha = (a) => color.replace(/,\s*1\)$/, `, ${a})`);
+            gradient.addColorStop(0, withAlpha(0.3));
+            gradient.addColorStop(1, withAlpha(0.05));
+
+            if (this.repeaterCharts[chartKey]) {
+                this.repeaterCharts[chartKey].destroy();
+            }
+
+            this.repeaterCharts[chartKey] = new Chart(ctx, {
+                type: 'line',
+                data: { labels: canvas._labels, datasets: [{
+                    label,
+                    data: values,
+                    borderColor: color,
+                    backgroundColor: gradient,
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 0,
+                    borderWidth: 2,
+                    spanGaps: true
+                }]},
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: { callbacks: { label: tooltipFn } }
+                    },
+                    scales: {
+                        x: {
+                            display: true,
+                            grid: { display: false },
+                            ticks: { color: textColor, font: { size: 9 }, maxTicksLimit: 5 }
+                        },
+                        y: {
+                            type: 'linear',
+                            display: true,
+                            position: 'left',
+                            grid: { color: gridColor },
+                            ticks: { color: textColor, font: { size: 9 }, maxTicksLimit: 4,
+                                callback: (v) => v + unit },
+                            ...yOptions
+                        }
+                    }
+                }
+            });
+        },
+
+        renderSensorCharts() {
+            this.repeaters.forEach(repeater => {
+                if (!repeater.telemetry) return;
+                const t = repeater.telemetry;
+
+                const renderOne = (suffix, label, values, color, unit, tooltipFn, yOptions) => {
+                    const canvasId = `chart-${repeater.id}-${suffix}`;
+                    const canvas = document.getElementById(canvasId);
+                    if (!canvas) return;
+                    canvas._labels = t.labels;
+                    this._renderSensorChart(canvasId, repeater.id + '-' + suffix, label, values, color, unit, tooltipFn, yOptions);
+                };
+
+                if (t.temperature.some(v => v != null)) {
+                    renderOne('temp', 'Temperature', t.temperature,
+                        'rgba(249, 115, 22, 1)', '°C',
+                        (ctx) => `Temp: ${ctx.parsed.y.toFixed(1)}°C`,
+                        {}
+                    );
+                }
+                if (t.pressure.some(v => v != null)) {
+                    renderOne('pres', 'Pressure', t.pressure,
+                        'rgba(99, 102, 241, 1)', ' hPa',
+                        (ctx) => `Pressure: ${ctx.parsed.y.toFixed(1)} hPa`,
+                        {}
+                    );
+                }
+                if (t.humidity.some(v => v != null)) {
+                    renderOne('hum', 'Humidity', t.humidity,
+                        'rgba(14, 165, 233, 1)', '%',
+                        (ctx) => `Humidity: ${ctx.parsed.y.toFixed(1)}%`,
+                        { min: 0, max: 100 }
+                    );
+                }
             });
         },
 
