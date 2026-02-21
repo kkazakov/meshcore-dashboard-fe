@@ -568,9 +568,9 @@
                     <div x-show="!repeatersLoading && repeaters.length === 0" class="text-center py-12 text-gray-500 dark:text-gray-400">
                         No repeaters found
                     </div>
-                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div class="flex flex-col gap-4">
                         <template x-for="repeater in repeaters" :key="repeater.id">
-                            <div class="contents">
+                            <div class="grid grid-cols-4 gap-4">
                                     <!-- Battery card -->
                                     <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-5 transition-colors">
                                         <!-- Card header: name + edit | enabled/disabled badge -->
@@ -638,7 +638,7 @@
                                         <div class="flex items-center justify-between text-sm">
                                             <span class="text-gray-600 dark:text-gray-400">Last reading</span>
                                             <span class="font-semibold text-orange-600 dark:text-orange-400"
-                                                x-text="repeater.telemetry && repeater.telemetry.temperature ? (repeater.telemetry.temperature.filter(v => v != null).slice(-1)[0]?.toFixed(1) + ' °C') : 'N/A'"
+                                                x-text="repeater.telemetry && repeater.telemetry.temperature ? (repeater.telemetry.temperature.filter(v => v != null).slice(-1)[0]?.toFixed(1) + ' °C') : ''"
                                             ></span>
                                         </div>
                                     </div>
@@ -660,7 +660,7 @@
                                         <div class="flex items-center justify-between text-sm">
                                             <span class="text-gray-600 dark:text-gray-400">Last reading</span>
                                             <span class="font-semibold text-indigo-600 dark:text-indigo-400"
-                                                x-text="repeater.telemetry && repeater.telemetry.pressure ? (repeater.telemetry.pressure.filter(v => v != null).slice(-1)[0]?.toFixed(1) + ' hPa') : 'N/A'"
+                                                x-text="repeater.telemetry && repeater.telemetry.pressure ? (repeater.telemetry.pressure.filter(v => v != null).slice(-1)[0]?.toFixed(1) + ' hPa') : ''"
                                             ></span>
                                         </div>
                                     </div>
@@ -682,7 +682,7 @@
                                         <div class="flex items-center justify-between text-sm">
                                             <span class="text-gray-600 dark:text-gray-400">Last reading</span>
                                             <span class="font-semibold text-sky-600 dark:text-sky-400"
-                                                x-text="repeater.telemetry && repeater.telemetry.humidity ? (repeater.telemetry.humidity.filter(v => v != null).slice(-1)[0]?.toFixed(1) + ' %') : 'N/A'"
+                                                x-text="repeater.telemetry && repeater.telemetry.humidity ? (repeater.telemetry.humidity.filter(v => v != null).slice(-1)[0]?.toFixed(1) + ' %') : ''"
                                             ></span>
                                         </div>
                                     </div>

@@ -50,6 +50,7 @@ function app() {
         showDeleteRepeaterModal: false,
         deleteRepeaterLoading: false,
         deleteRepeaterTarget: null,
+        _polling: false,
         _pollMessage: null,
         _pollMessageTimer: null,
         _telemetryRefreshTimer: null,
@@ -862,11 +863,10 @@ y1: {
                     }
                 });
             });
-            this.$nextTick(() => this.renderSensorCharts());
+            this.renderSensorCharts();
         },
 
-        _renderSensorChart(canvasId, chartKey, label, values, color, unit, tooltipFn, yOptions) {
-            const canvas = document.getElementById(canvasId);
+        _renderSensorChart(canvas, chartKey, label, labels, values, color, unit, tooltipFn, yOptions) {
             if (!canvas) return;
             const hasData = values.some(v => v != null);
             if (!hasData) return;
@@ -875,22 +875,22 @@ y1: {
             const gridColor = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)';
             const textColor = isDark ? '#9ca3af' : '#6b7280';
 
-            // labels are passed in via canvasId look-up so we pull from the chart data already set
-            // We receive labels separately — see callers
             const ctx = canvas.getContext('2d');
+            if (!ctx) return;
             const gradient = ctx.createLinearGradient(0, 0, 0, 160);
-            // Replace the alpha at the end of rgba(..., 1) safely
             const withAlpha = (a) => color.replace(/,\s*1\)$/, `, ${a})`);
             gradient.addColorStop(0, withAlpha(0.3));
             gradient.addColorStop(1, withAlpha(0.05));
 
+            // Destroy any stale instance (e.g. after theme toggle)
             if (this.repeaterCharts[chartKey]) {
                 this.repeaterCharts[chartKey].destroy();
+                delete this.repeaterCharts[chartKey];
             }
 
             this.repeaterCharts[chartKey] = new Chart(ctx, {
                 type: 'line',
-                data: { labels: canvas._labels, datasets: [{
+                data: { labels, datasets: [{
                     label,
                     data: values,
                     borderColor: color,
@@ -935,34 +935,27 @@ y1: {
                 const t = repeater.telemetry;
 
                 const renderOne = (suffix, label, values, color, unit, tooltipFn, yOptions) => {
-                    const canvasId = `chart-${repeater.id}-${suffix}`;
-                    const canvas = document.getElementById(canvasId);
+                    if (!values.some(v => v != null)) return;
+                    const canvas = document.getElementById(`chart-${repeater.id}-${suffix}`);
                     if (!canvas) return;
-                    canvas._labels = t.labels;
-                    this._renderSensorChart(canvasId, repeater.id + '-' + suffix, label, values, color, unit, tooltipFn, yOptions);
+                    this._renderSensorChart(canvas, repeater.id + '-' + suffix, label, t.labels, values, color, unit, tooltipFn, yOptions);
                 };
 
-                if (t.temperature.some(v => v != null)) {
-                    renderOne('temp', 'Temperature', t.temperature,
-                        'rgba(249, 115, 22, 1)', '°C',
-                        (ctx) => `Temp: ${ctx.parsed.y.toFixed(1)}°C`,
-                        {}
-                    );
-                }
-                if (t.pressure.some(v => v != null)) {
-                    renderOne('pres', 'Pressure', t.pressure,
-                        'rgba(99, 102, 241, 1)', ' hPa',
-                        (ctx) => `Pressure: ${ctx.parsed.y.toFixed(1)} hPa`,
-                        {}
-                    );
-                }
-                if (t.humidity.some(v => v != null)) {
-                    renderOne('hum', 'Humidity', t.humidity,
-                        'rgba(14, 165, 233, 1)', '%',
-                        (ctx) => `Humidity: ${ctx.parsed.y.toFixed(1)}%`,
-                        { min: 0, max: 100 }
-                    );
-                }
+                renderOne('temp', 'Temperature', t.temperature,
+                    'rgba(249, 115, 22, 1)', '°C',
+                    (c) => `Temp: ${c.parsed.y.toFixed(1)}°C`,
+                    {}
+                );
+                renderOne('pres', 'Pressure', t.pressure,
+                    'rgba(99, 102, 241, 1)', ' hPa',
+                    (c) => `Pressure: ${c.parsed.y.toFixed(1)} hPa`,
+                    {}
+                );
+                renderOne('hum', 'Humidity', t.humidity,
+                    'rgba(14, 165, 233, 1)', '%',
+                    (c) => `Humidity: ${c.parsed.y.toFixed(1)}%`,
+                    { min: 0, max: 100 }
+                );
             });
         },
 
