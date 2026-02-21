@@ -50,6 +50,8 @@ function app() {
         showDeleteRepeaterModal: false,
         deleteRepeaterLoading: false,
         deleteRepeaterTarget: null,
+        _pollMessage: null,
+        _pollMessageTimer: null,
         // tab visibility tracking
         _docHidden: false,
         _hiddenUnread: 0,
@@ -485,6 +487,34 @@ function app() {
                 console.error(err);
                 this.repeaters[idx] = { ...this.repeaters[idx], _toggling: false };
             }
+        },
+
+        async pollRepeaters() {
+            this._polling = true;
+            const token = localStorage.getItem('api_token');
+            try {
+                const response = await fetch(`${API_BASE}/api/repeaters/poll`, {
+                    method: 'POST',
+                    headers: { 'x-api-token': token }
+                });
+
+                if (response.status === 401) { this.handleUnauthorized(); return; }
+
+                const data = await response.json().catch(() => ({}));
+                this._showPollMessage(data.message || (response.ok ? 'Poll started' : 'Poll failed'));
+                if (!response.ok) console.error('Failed to poll repeaters');
+            } catch (err) {
+                console.error(err);
+                this._showPollMessage('Network error');
+            } finally {
+                this._polling = false;
+            }
+        },
+
+        _showPollMessage(msg) {
+            this._pollMessage = msg;
+            clearTimeout(this._pollMessageTimer);
+            this._pollMessageTimer = setTimeout(() => { this._pollMessage = null; }, 4000);
         },
 
         async disableRepeater(repeater) {
