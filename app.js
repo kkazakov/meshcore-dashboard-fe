@@ -52,6 +52,7 @@ function app() {
         deleteRepeaterTarget: null,
         _pollMessage: null,
         _pollMessageTimer: null,
+        _telemetryRefreshTimer: null,
         // tab visibility tracking
         _docHidden: false,
         _hiddenUnread: 0,
@@ -585,6 +586,35 @@ function app() {
             }
         },
 
+        async _refreshTelemetrySilently() {
+            if (!this.repeaters.length) return;
+            await Promise.all(this.repeaters.map(r => this.fetchRepeaterTelemetry(r)));
+            // Patch existing Chart.js instances in-place — no destroy/recreate, no flash
+            this.repeaters.forEach(repeater => {
+                const chart = this.repeaterCharts[repeater.id];
+                if (!chart || !repeater.telemetry) return;
+                const t = repeater.telemetry;
+                chart.data.labels = t.labels;
+                chart.data.datasets.forEach(ds => {
+                    if (ds.label === 'Battery %') ds.data = t.percentage;
+                    else if (ds.label === 'Voltage') ds.data = t.voltage;
+                });
+                chart.update('none'); // 'none' disables animation
+            });
+        },
+
+        _startTelemetryRefresh() {
+            this._stopTelemetryRefresh();
+            this._telemetryRefreshTimer = setInterval(() => this._refreshTelemetrySilently(), 60_000);
+        },
+
+        _stopTelemetryRefresh() {
+            if (this._telemetryRefreshTimer) {
+                clearInterval(this._telemetryRefreshTimer);
+                this._telemetryRefreshTimer = null;
+            }
+        },
+
         processTelemetryData(data) {
             const voltageRecords = data.data?.battery_voltage || [];
             const percentageRecords = data.data?.battery_percentage || [];
@@ -804,13 +834,17 @@ y1: {
                 window.location.hash = page;
             }
             if (page === 'telemetry' && this.repeaters.length === 0) {
-                this.fetchRepeaters();
+                this.fetchRepeaters().then(() => this._startTelemetryRefresh());
             } else if (page === 'telemetry' && this.repeaters.length > 0) {
                 this.$nextTick(() => this.renderCharts());
-            } else if (page === 'messages') {
-                this.destroyCharts();
-                // When switching back to messages, flush the queue for the current channel
-                this._flushQueueForCurrentChannel();
+                this._startTelemetryRefresh();
+            } else {
+                this._stopTelemetryRefresh();
+                if (page === 'messages') {
+                    this.destroyCharts();
+                    // When switching back to messages, flush the queue for the current channel
+                    this._flushQueueForCurrentChannel();
+                }
             }
         },
 
@@ -1023,6 +1057,7 @@ y1: {
 
         handleUnauthorized() {
             this.disconnectWebSocket();
+            this._stopTelemetryRefresh();
             this.destroyCharts();
             this.clearSession();
             this.view = 'login';
@@ -1164,6 +1199,7 @@ y1: {
 
         logout() {
             this.disconnectWebSocket();
+            this._stopTelemetryRefresh();
             this._teardownVisibilityHandler();
             this.destroyCharts();
             this.clearSession();
