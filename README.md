@@ -7,10 +7,10 @@ Built with vanilla HTML, Alpine.js, and Tailwind CSS — no build step required.
 ## Screenshots
 
 ### Messages view
-![Messages view](screenshots/screen-1.png)
+![Messages view](screenshots/screen-1.jpg)
 
 ### Telemetry view
-![Telemetry view](screenshots/screen-2.png)
+![Telemetry view](screenshots/screen-2.jpg)
 
 ## Requirements
 
