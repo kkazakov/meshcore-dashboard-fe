@@ -42,7 +42,7 @@ function app() {
         showAddRepeaterModal: false,
         addRepeaterLoading: false,
         addRepeaterError: null,
-        newRepeaterForm: { name: '', publicKey: '' },
+        newRepeaterForm: { name: '', publicKey: '', password: '' },
         showEditRepeaterModal: false,
         editRepeaterLoading: false,
         editRepeaterError: null,
@@ -328,7 +328,8 @@ function app() {
                     },
                     body: JSON.stringify({
                         name: this.newRepeaterForm.name,
-                        public_key: this.newRepeaterForm.publicKey
+                        public_key: this.newRepeaterForm.publicKey,
+                        password: this.newRepeaterForm.password
                     })
                 });
 
@@ -345,7 +346,7 @@ function app() {
 
                 // Close modal, reset form, refresh list
                 this.showAddRepeaterModal = false;
-                this.newRepeaterForm = { name: '', publicKey: '' };
+                this.newRepeaterForm = { name: '', publicKey: '', password: '' };
                 await this.fetchRepeaters();
             } catch (err) {
                 this.addRepeaterError = 'Network error — please try again';
