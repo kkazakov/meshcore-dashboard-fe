@@ -863,7 +863,7 @@ y1: {
                     }
                 });
             });
-            this.renderSensorCharts();
+            this.$nextTick(() => this.renderSensorCharts());
         },
 
         _renderSensorChart(canvas, chartKey, label, labels, values, color, unit, tooltipFn, yOptions) {
