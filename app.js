@@ -802,8 +802,8 @@ function app() {
                         datasets
                     },
                     options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
+                        responsive: false,
+                        animation: false,
                         interaction: {
                             mode: 'index',
                             intersect: false
@@ -902,8 +902,8 @@ y1: {
                     spanGaps: true
                 }]},
                 options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
+                    responsive: false,
+                    animation: false,
                     interaction: { mode: 'index', intersect: false },
                     plugins: {
                         legend: { display: false },
