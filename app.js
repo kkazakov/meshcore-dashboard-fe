@@ -575,12 +575,13 @@ function app() {
                 const lastPct = telemetry.percentage.filter(v => v != null).pop();
                 const idx = this.repeaters.findIndex(r => r.id === repeater.id);
                 if (idx !== -1) {
-                    this.repeaters[idx] = {
-                        ...this.repeaters[idx],
+                    // Mutate in-place so Alpine doesn't tear down and recreate the
+                    // x-for DOM nodes (which would detach the canvases Chart.js holds)
+                    Object.assign(this.repeaters[idx], {
                         telemetry: telemetry,
                         currentBattery: lastPct != null ? lastPct : null,
                         lastReadingTime: telemetry.lastReadingTime
-                    };
+                    });
                 }
             } catch (err) {
                 console.error('Error fetching telemetry for', repeater.name, err);
