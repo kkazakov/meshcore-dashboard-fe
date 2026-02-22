@@ -921,7 +921,7 @@ y1: {
                             position: 'left',
                             grid: { color: gridColor },
                             ticks: { color: textColor, font: { size: 9 }, maxTicksLimit: 4,
-                                callback: (v) => v + unit },
+                                callback: (v) => parseFloat(v.toFixed(1)) + unit },
                             ...yOptions
                         }
                     }
