@@ -596,36 +596,34 @@ function app() {
                 if (!repeater.telemetry) return;
                 const t = repeater.telemetry;
 
-                const batteryChart = this.repeaterCharts[repeater.id];
-                if (batteryChart) {
-                    batteryChart.data.labels = t.labels;
-                    batteryChart.data.datasets.forEach(ds => {
+                const safeUpdate = (chart, mutateFn) => {
+                    if (!chart || !chart.canvas || !chart.canvas.isConnected) return;
+                    mutateFn(chart);
+                    try { chart.update('none'); } catch (e) { /* stale chart, ignore */ }
+                };
+
+                safeUpdate(this.repeaterCharts[repeater.id], chart => {
+                    chart.data.labels = t.labels;
+                    chart.data.datasets.forEach(ds => {
                         if (ds.label === 'Battery %') ds.data = t.percentage;
                         else if (ds.label === 'Voltage') ds.data = t.voltage;
                     });
-                    batteryChart.update('none');
-                }
+                });
 
-                const tempChart = this.repeaterCharts[repeater.id + '-temp'];
-                if (tempChart) {
-                    tempChart.data.labels = t.labels;
-                    tempChart.data.datasets.forEach(ds => { if (ds.label === 'Temperature') ds.data = t.temperature; });
-                    tempChart.update('none');
-                }
+                safeUpdate(this.repeaterCharts[repeater.id + '-temp'], chart => {
+                    chart.data.labels = t.labels;
+                    chart.data.datasets.forEach(ds => { if (ds.label === 'Temperature') ds.data = t.temperature; });
+                });
 
-                const presChart = this.repeaterCharts[repeater.id + '-pres'];
-                if (presChart) {
-                    presChart.data.labels = t.labels;
-                    presChart.data.datasets.forEach(ds => { if (ds.label === 'Pressure') ds.data = t.pressure; });
-                    presChart.update('none');
-                }
+                safeUpdate(this.repeaterCharts[repeater.id + '-pres'], chart => {
+                    chart.data.labels = t.labels;
+                    chart.data.datasets.forEach(ds => { if (ds.label === 'Pressure') ds.data = t.pressure; });
+                });
 
-                const humChart = this.repeaterCharts[repeater.id + '-hum'];
-                if (humChart) {
-                    humChart.data.labels = t.labels;
-                    humChart.data.datasets.forEach(ds => { if (ds.label === 'Humidity') ds.data = t.humidity; });
-                    humChart.update('none');
-                }
+                safeUpdate(this.repeaterCharts[repeater.id + '-hum'], chart => {
+                    chart.data.labels = t.labels;
+                    chart.data.datasets.forEach(ds => { if (ds.label === 'Humidity') ds.data = t.humidity; });
+                });
             });
         },
 
