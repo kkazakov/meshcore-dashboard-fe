@@ -53,6 +53,10 @@ function app() {
         showDeleteChannelModal: false,
         deleteChannelLoading: false,
         deleteChannelTarget: null,
+        showAddChannelModal: false,
+        addChannelLoading: false,
+        addChannelError: null,
+        addChannelForm: { name: '', password: '' },
         _polling: false,
         _pollMessage: null,
         _pollMessageTimer: null,
@@ -1257,6 +1261,55 @@ y1: {
                 this._flushQueueForCurrentChannel();
             });
             this.focusInput();
+        },
+
+        async addChannel() {
+            const name = this.addChannelForm.name.trim();
+            if (!name) return;
+            this.addChannelLoading = true;
+            this.addChannelError = null;
+            const token = localStorage.getItem('api_token');
+            const isPublic = name.startsWith('#');
+            const body = isPublic
+                ? { name }
+                : { name, password: this.addChannelForm.password };
+            try {
+                const response = await fetch(`${API_BASE}/api/channels`, {
+                    method: 'POST',
+                    headers: {
+                        'content-type': 'application/json',
+                        'x-api-token': token,
+                    },
+                    body: JSON.stringify(body),
+                });
+
+                if (response.status === 401) {
+                    this.handleUnauthorized();
+                    return;
+                }
+
+                if (!response.ok) {
+                    const errData = await response.json().catch(() => ({}));
+                    this.addChannelError = errData.message || 'Failed to add channel';
+                    return;
+                }
+
+                const data = await response.json();
+                this.channels = data.channels || [];
+                this.showAddChannelModal = false;
+                this.addChannelForm = { name: '', password: '' };
+
+                // Switch to the newly added channel
+                const added = this.channels.find(c => c.name === name);
+                if (added) {
+                    this.selectChannel(added.index, added.name);
+                }
+            } catch (err) {
+                console.error('addChannel failed:', err);
+                this.addChannelError = 'Network error, please try again';
+            } finally {
+                this.addChannelLoading = false;
+            }
         },
 
         confirmDeleteChannel() {
