@@ -50,6 +50,9 @@ function app() {
         showDeleteRepeaterModal: false,
         deleteRepeaterLoading: false,
         deleteRepeaterTarget: null,
+        showDeleteChannelModal: false,
+        deleteChannelLoading: false,
+        deleteChannelTarget: null,
         _polling: false,
         _pollMessage: null,
         _pollMessageTimer: null,
@@ -1254,6 +1257,50 @@ y1: {
                 this._flushQueueForCurrentChannel();
             });
             this.focusInput();
+        },
+
+        confirmDeleteChannel() {
+            this.deleteChannelTarget = this.selectedChannel;
+            this.showDeleteChannelModal = true;
+        },
+
+        async deleteChannel() {
+            if (!this.deleteChannelTarget) return;
+            this.deleteChannelLoading = true;
+            const token = localStorage.getItem('api_token');
+            try {
+                const response = await fetch(`${API_BASE}/api/channels`, {
+                    method: 'DELETE',
+                    headers: {
+                        'content-type': 'application/json',
+                        'x-api-token': token,
+                    },
+                    body: JSON.stringify({ name: this.deleteChannelTarget }),
+                });
+
+                if (response.status === 401) {
+                    this.handleUnauthorized();
+                    return;
+                }
+
+                if (!response.ok) throw new Error('Failed to delete channel');
+
+                const data = await response.json();
+                this.channels = data.channels || [];
+                this.showDeleteChannelModal = false;
+                this.deleteChannelTarget = null;
+
+                // Switch to first channel
+                if (this.channels.length > 0) {
+                    const first = this.channels[0];
+                    this.selectChannel(first.index, first.name);
+                    window.location.hash = `channel-${first.index}`;
+                }
+            } catch (err) {
+                console.error('deleteChannel failed:', err);
+            } finally {
+                this.deleteChannelLoading = false;
+            }
         },
 
         msgByteCount() {
