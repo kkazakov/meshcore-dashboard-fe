@@ -178,6 +178,18 @@
                             </button>
                         </template>
                     </nav>
+                    <!-- Add Channel button -->
+                    <div class="p-3 border-t border-gray-200 dark:border-gray-700">
+                        <button
+                            @click="showAddChannelModal = true; addChannelError = null; addChannelForm = { name: '', password: '' }"
+                            class="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg transition-colors"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd"/>
+                            </svg>
+                            Add channel
+                        </button>
+                    </div>
                 </aside>
 
                 <!-- Chat Area -->
@@ -185,7 +197,18 @@
                     <!-- Chat Header -->
                     <div class="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4 flex items-center justify-between transition-colors">
                         <h3 class="text-lg font-semibold text-gray-800 dark:text-white" x-text="selectedChannel"></h3>
-                        <span class="text-xs text-gray-400 dark:text-gray-500 tabular-nums" x-text="messages.length + ' messages'"></span>
+                        <div class="flex items-center gap-3">
+                            <span class="text-xs text-gray-400 dark:text-gray-500 tabular-nums" x-text="messages.length + ' messages'"></span>
+                            <button
+                                @click="confirmDeleteChannel()"
+                                title="Delete channel"
+                                class="flex items-center justify-center w-7 h-7 rounded-md text-gray-400 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                                </svg>
+                            </button>
+                        </div>
                     </div>
 
                     <!-- Initial loading spinner — outside scroll container so it never affects scroll layout -->
@@ -292,6 +315,132 @@
                                 </svg>
                             </button>
                         </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Add Channel Modal -->
+            <div
+                x-show="showAddChannelModal"
+                x-transition:enter="transition ease-out duration-150"
+                x-transition:enter-start="opacity-0"
+                x-transition:enter-end="opacity-100"
+                x-transition:leave="transition ease-in duration-100"
+                x-transition:leave-start="opacity-100"
+                x-transition:leave-end="opacity-0"
+                class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+                @keydown.escape.window="showAddChannelModal = false"
+                @click.self="showAddChannelModal = false"
+            >
+                <div class="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-sm mx-4 p-6">
+                    <h4 class="text-base font-semibold text-gray-800 dark:text-white mb-4">Add channel</h4>
+
+                    <form @submit.prevent="addChannel()" class="space-y-4">
+                        <!-- Channel name -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Channel name</label>
+                            <input
+                                type="text"
+                                x-model="addChannelForm.name"
+                                placeholder="#public or private-name"
+                                autocomplete="off"
+                                class="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all text-sm"
+                            />
+                        </div>
+
+                        <!-- Password (disabled for # channels) -->
+                        <div>
+                            <label
+                                class="block text-sm font-medium mb-1 transition-colors"
+                                :class="addChannelForm.name.startsWith('#') ? 'text-gray-400 dark:text-gray-600' : 'text-gray-700 dark:text-gray-300'"
+                            >
+                                Password
+                                <span x-show="addChannelForm.name.startsWith('#')" class="ml-1 text-xs font-normal text-gray-400 dark:text-gray-500">(not used for # channels)</span>
+                            </label>
+                            <input
+                                type="password"
+                                x-model="addChannelForm.password"
+                                :disabled="addChannelForm.name.startsWith('#')"
+                                placeholder="Channel password"
+                                autocomplete="new-password"
+                                class="w-full px-3 py-2 rounded-lg border bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all text-sm disabled:opacity-40 disabled:cursor-not-allowed"
+                                :class="addChannelForm.name.startsWith('#') ? 'border-gray-200 dark:border-gray-700' : 'border-gray-300 dark:border-gray-600'"
+                            />
+                        </div>
+
+                        <!-- Error -->
+                        <div x-show="addChannelError" class="text-sm text-red-500 dark:text-red-400" x-text="addChannelError"></div>
+
+                        <!-- Actions -->
+                        <div class="flex gap-3 pt-1">
+                            <button
+                                type="button"
+                                @click="showAddChannelModal = false"
+                                class="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 text-sm font-medium rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="submit"
+                                :disabled="addChannelLoading || !addChannelForm.name.trim()"
+                                class="flex-1 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+                            >
+                                <svg x-show="addChannelLoading" class="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle>
+                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                                <span x-text="addChannelLoading ? 'Adding...' : 'Add channel'"></span>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Delete Channel Confirmation Modal -->
+            <div
+                x-show="showDeleteChannelModal"
+                x-transition:enter="transition ease-out duration-150"
+                x-transition:enter-start="opacity-0"
+                x-transition:enter-end="opacity-100"
+                x-transition:leave="transition ease-in duration-100"
+                x-transition:leave-start="opacity-100"
+                x-transition:leave-end="opacity-0"
+                class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+                @keydown.escape.window="showDeleteChannelModal = false"
+                @click.self="showDeleteChannelModal = false"
+            >
+                <div class="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-sm mx-4 p-6">
+                    <div class="flex items-center gap-3 mb-4">
+                        <div class="flex-shrink-0 w-10 h-10 rounded-full bg-red-100 dark:bg-red-900/40 flex items-center justify-center">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-red-600 dark:text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <h4 class="text-base font-semibold text-gray-800 dark:text-white">Delete Channel</h4>
+                            <p class="text-sm text-gray-500 dark:text-gray-400">
+                                Delete <span class="font-medium text-gray-700 dark:text-gray-300" x-text="deleteChannelTarget || ''"></span>? This cannot be undone.
+                            </p>
+                        </div>
+                    </div>
+                    <div class="flex gap-3">
+                        <button
+                            @click="showDeleteChannelModal = false"
+                            class="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 text-sm font-medium rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            @click="deleteChannel()"
+                            :disabled="deleteChannelLoading"
+                            class="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+                        >
+                            <svg x-show="deleteChannelLoading" class="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            <span x-text="deleteChannelLoading ? 'Deleting...' : 'Delete'"></span>
+                        </button>
                     </div>
                 </div>
             </div>
@@ -701,6 +850,6 @@
         </main>
     </div>
 
-    <script src="app.js"></script>
+    <script src="app.js?v=3"></script>
 </body>
 </html>

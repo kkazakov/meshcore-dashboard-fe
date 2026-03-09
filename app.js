@@ -50,6 +50,13 @@ function app() {
         showDeleteRepeaterModal: false,
         deleteRepeaterLoading: false,
         deleteRepeaterTarget: null,
+        showDeleteChannelModal: false,
+        deleteChannelLoading: false,
+        deleteChannelTarget: null,
+        showAddChannelModal: false,
+        addChannelLoading: false,
+        addChannelError: null,
+        addChannelForm: { name: '', password: '' },
         _polling: false,
         _pollMessage: null,
         _pollMessageTimer: null,
@@ -575,12 +582,13 @@ function app() {
                 const lastPct = telemetry.percentage.filter(v => v != null).pop();
                 const idx = this.repeaters.findIndex(r => r.id === repeater.id);
                 if (idx !== -1) {
-                    this.repeaters[idx] = {
-                        ...this.repeaters[idx],
+                    // Mutate in-place so Alpine doesn't tear down and recreate the
+                    // x-for DOM nodes (which would detach the canvases Chart.js holds)
+                    Object.assign(this.repeaters[idx], {
                         telemetry: telemetry,
                         currentBattery: lastPct != null ? lastPct : null,
                         lastReadingTime: telemetry.lastReadingTime
-                    };
+                    });
                 }
             } catch (err) {
                 console.error('Error fetching telemetry for', repeater.name, err);
@@ -595,36 +603,34 @@ function app() {
                 if (!repeater.telemetry) return;
                 const t = repeater.telemetry;
 
-                const batteryChart = this.repeaterCharts[repeater.id];
-                if (batteryChart) {
-                    batteryChart.data.labels = t.labels;
-                    batteryChart.data.datasets.forEach(ds => {
+                const safeUpdate = (chart, mutateFn) => {
+                    if (!chart || !chart.canvas || !chart.canvas.isConnected) return;
+                    mutateFn(chart);
+                    try { chart.update('none'); } catch (e) { /* stale chart, ignore */ }
+                };
+
+                safeUpdate(this.repeaterCharts[repeater.id], chart => {
+                    chart.data.labels = t.labels;
+                    chart.data.datasets.forEach(ds => {
                         if (ds.label === 'Battery %') ds.data = t.percentage;
                         else if (ds.label === 'Voltage') ds.data = t.voltage;
                     });
-                    batteryChart.update('none');
-                }
+                });
 
-                const tempChart = this.repeaterCharts[repeater.id + '-temp'];
-                if (tempChart) {
-                    tempChart.data.labels = t.labels;
-                    tempChart.data.datasets.forEach(ds => { if (ds.label === 'Temperature') ds.data = t.temperature; });
-                    tempChart.update('none');
-                }
+                safeUpdate(this.repeaterCharts[repeater.id + '-temp'], chart => {
+                    chart.data.labels = t.labels;
+                    chart.data.datasets.forEach(ds => { if (ds.label === 'Temperature') ds.data = t.temperature; });
+                });
 
-                const presChart = this.repeaterCharts[repeater.id + '-pres'];
-                if (presChart) {
-                    presChart.data.labels = t.labels;
-                    presChart.data.datasets.forEach(ds => { if (ds.label === 'Pressure') ds.data = t.pressure; });
-                    presChart.update('none');
-                }
+                safeUpdate(this.repeaterCharts[repeater.id + '-pres'], chart => {
+                    chart.data.labels = t.labels;
+                    chart.data.datasets.forEach(ds => { if (ds.label === 'Pressure') ds.data = t.pressure; });
+                });
 
-                const humChart = this.repeaterCharts[repeater.id + '-hum'];
-                if (humChart) {
-                    humChart.data.labels = t.labels;
-                    humChart.data.datasets.forEach(ds => { if (ds.label === 'Humidity') ds.data = t.humidity; });
-                    humChart.update('none');
-                }
+                safeUpdate(this.repeaterCharts[repeater.id + '-hum'], chart => {
+                    chart.data.labels = t.labels;
+                    chart.data.datasets.forEach(ds => { if (ds.label === 'Humidity') ds.data = t.humidity; });
+                });
             });
         },
 
@@ -802,8 +808,8 @@ function app() {
                         datasets
                     },
                     options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
+                        responsive: false,
+                        animation: false,
                         interaction: {
                             mode: 'index',
                             intersect: false
@@ -863,6 +869,7 @@ y1: {
                     }
                 });
             });
+            this.$nextTick(() => this.renderSensorCharts());
             this.renderSensorCharts();
         },
 
@@ -902,8 +909,8 @@ y1: {
                     spanGaps: true
                 }]},
                 options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
+                    responsive: false,
+                    animation: false,
                     interaction: { mode: 'index', intersect: false },
                     plugins: {
                         legend: { display: false },
@@ -921,7 +928,7 @@ y1: {
                             position: 'left',
                             grid: { color: gridColor },
                             ticks: { color: textColor, font: { size: 9 }, maxTicksLimit: 4,
-                                callback: (v) => v + unit },
+                                callback: (v) => parseFloat(v.toFixed(1)) + unit },
                             ...yOptions
                         }
                     }
@@ -1255,6 +1262,99 @@ y1: {
                 this._flushQueueForCurrentChannel();
             });
             this.focusInput();
+        },
+
+        async addChannel() {
+            const name = this.addChannelForm.name.trim();
+            if (!name) return;
+            this.addChannelLoading = true;
+            this.addChannelError = null;
+            const token = localStorage.getItem('api_token');
+            const isPublic = name.startsWith('#');
+            const body = isPublic
+                ? { name }
+                : { name, password: this.addChannelForm.password };
+            try {
+                const response = await fetch(`${API_BASE}/api/channels`, {
+                    method: 'POST',
+                    headers: {
+                        'content-type': 'application/json',
+                        'x-api-token': token,
+                    },
+                    body: JSON.stringify(body),
+                });
+
+                if (response.status === 401) {
+                    this.handleUnauthorized();
+                    return;
+                }
+
+                if (!response.ok) {
+                    const errData = await response.json().catch(() => ({}));
+                    this.addChannelError = errData.message || 'Failed to add channel';
+                    return;
+                }
+
+                const data = await response.json();
+                this.channels = data.channels || [];
+                this.showAddChannelModal = false;
+                this.addChannelForm = { name: '', password: '' };
+
+                // Switch to the newly added channel
+                const added = this.channels.find(c => c.name === name);
+                if (added) {
+                    this.selectChannel(added.index, added.name);
+                }
+            } catch (err) {
+                console.error('addChannel failed:', err);
+                this.addChannelError = 'Network error, please try again';
+            } finally {
+                this.addChannelLoading = false;
+            }
+        },
+
+        confirmDeleteChannel() {
+            this.deleteChannelTarget = this.selectedChannel;
+            this.showDeleteChannelModal = true;
+        },
+
+        async deleteChannel() {
+            if (!this.deleteChannelTarget) return;
+            this.deleteChannelLoading = true;
+            const token = localStorage.getItem('api_token');
+            try {
+                const response = await fetch(`${API_BASE}/api/channels`, {
+                    method: 'DELETE',
+                    headers: {
+                        'content-type': 'application/json',
+                        'x-api-token': token,
+                    },
+                    body: JSON.stringify({ name: this.deleteChannelTarget }),
+                });
+
+                if (response.status === 401) {
+                    this.handleUnauthorized();
+                    return;
+                }
+
+                if (!response.ok) throw new Error('Failed to delete channel');
+
+                const data = await response.json();
+                this.channels = data.channels || [];
+                this.showDeleteChannelModal = false;
+                this.deleteChannelTarget = null;
+
+                // Switch to first channel
+                if (this.channels.length > 0) {
+                    const first = this.channels[0];
+                    this.selectChannel(first.index, first.name);
+                    window.location.hash = `channel-${first.index}`;
+                }
+            } catch (err) {
+                console.error('deleteChannel failed:', err);
+            } finally {
+                this.deleteChannelLoading = false;
+            }
         },
 
         msgByteCount() {
