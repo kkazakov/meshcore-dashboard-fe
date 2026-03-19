@@ -1390,15 +1390,31 @@ y1: {
         },
 
         formatTime(ts) {
-            // Append Z if no timezone is present to ensure UTC parsing
             const normalised = (ts && !/[Zz]$/.test(ts) && !/[+-]\d{2}:?\d{2}$/.test(ts))
                 ? ts.replace(' ', 'T') + 'Z'
                 : ts;
-            return new Date(normalised).toLocaleTimeString('en-GB', {
+            const date = new Date(normalised);
+            const timeStr = date.toLocaleTimeString('en-GB', {
                 hour: '2-digit',
                 minute: '2-digit',
                 hour12: false
             });
+            const now = new Date();
+            const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            const msgDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+            const currentYear = now.getFullYear();
+            const msgYear = date.getFullYear();
+            if (today.getTime() === msgDate.getTime()) {
+                return timeStr;
+            } else {
+                const day = date.getDate().toString().padStart(2, '0');
+                const month = (date.getMonth() + 1).toString().padStart(2, '0');
+                if (msgYear === currentYear) {
+                    return `${timeStr} ${day}.${month}`;
+                } else {
+                    return `${timeStr} ${day}.${month}.${msgYear}`;
+                }
+            }
         },
 
         linkifyText(text) {

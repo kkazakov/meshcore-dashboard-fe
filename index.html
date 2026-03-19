@@ -245,9 +245,6 @@
                                         </div>
                                         <span :class="isMyMessage(msg) ? 'font-semibold text-white' : 'font-semibold text-gray-800 dark:text-white'" x-text="msg.sender"></span>
                                         <span :class="isMyMessage(msg) ? 'text-xs text-white/70' : 'text-xs text-gray-500 dark:text-gray-400'" x-text="formatTime(msg.ts)"></span>
-                                        <span x-show="msg.hops > 0" :class="isMyMessage(msg) 
-                                            ? 'text-xs px-2 py-0.5 rounded-full bg-white/20 text-white' 
-                                            : 'text-xs px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400'" x-text="msg.hops + ' hops'"></span>
                                     </div>
                                     <p :class="isMyMessage(msg) ? 'text-white pl-11' : 'text-gray-700 dark:text-gray-300 pl-11'" x-html="linkifyText(msg.text)"></p>
                                     <template x-for="imgUrl in extractImageUrls(msg.text)" :key="imgUrl">
@@ -264,7 +261,10 @@
                                             </a>
                                         </div>
                                     </template>
-                                    <div x-show="!isMyMessage(msg)" class="flex justify-end mt-1">
+                                    <div x-show="!isMyMessage(msg)" class="flex justify-between mt-1 gap-2">
+                                        <span x-show="msg.hops > 0" :class="isMyMessage(msg) 
+                                            ? 'text-xs px-2 py-0.5 rounded-full bg-white/20 text-white' 
+                                            : 'text-xs px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400'" x-text="msg.hops + ' hops'"></span>
                                         <button
                                             @click="replyTo(msg.sender)"
                                             class="text-xs text-gray-400 dark:text-gray-500 hover:text-indigo-500 dark:hover:text-indigo-400 transition-colors duration-150"
