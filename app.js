@@ -23,8 +23,6 @@ function app() {
         messagesLoading: false,
         messagesLoaded: false,
         lastMessageTimestamp: null,
-        // displayQueue: { [channelName]: [ ...messages ] }
-        displayQueue: {},
         wsSocket: null,
         wsReconnectDelay: 1000,
         wsReconnectTimer: null,
@@ -109,7 +107,6 @@ function app() {
             this._visibilityHandler = () => {
                 this._docHidden = document.hidden;
                 if (!document.hidden) {
-                    this._flushQueueForCurrentChannel();
                     this._hiddenUnread = 0;
                     document.title = this._originalTitle;
                 }
@@ -124,32 +121,9 @@ function app() {
             }
         },
 
-        // Returns the total number of queued (unread) messages across all channels
-        _totalQueuedCount() {
-            return Object.values(this.displayQueue).reduce((sum, arr) => sum + arr.length, 0);
-        },
-
-        // Returns the queued count for a specific channel name
-        _queuedCountForChannel(channelName) {
-            return (this.displayQueue[channelName] || []).length;
-        },
-
         // Flush the display queue for the currently selected channel into visible messages
         _flushQueueForCurrentChannel() {
-            const queued = this.displayQueue[this.selectedChannel];
-            if (!queued || queued.length === 0) return;
-
-            // Filter out messages we already have (by ts)
-            const existingTs = new Set(this.messages.map(m => m.ts));
-            const newOnes = queued.filter(m => !existingTs.has(m.ts));
-            if (newOnes.length > 0) {
-                this.messages = [...this.messages, ...newOnes];
-                this.$nextTick(() => this.scrollToBottom());
-            }
-            // Clear this channel from the queue
-            const updated = { ...this.displayQueue };
-            delete updated[this.selectedChannel];
-            this.displayQueue = updated;
+            // No-op - display queue is no longer used
         },
 
         loadTheme() {
@@ -990,8 +964,6 @@ y1: {
                 this._stopTelemetryRefresh();
                 if (page === 'messages') {
                     this.destroyCharts();
-                    // When switching back to messages, flush the queue for the current channel
-                    this._flushQueueForCurrentChannel();
                 }
             }
         },
@@ -1013,7 +985,7 @@ y1: {
                 if (!response.ok) throw new Error('Failed to fetch messages');
 
                 const data = await response.json();
-                this.messages = (data.messages || []).reverse();
+                this.messages = (data.messages || []).map(m => this._normaliseMessage(m, 'api')).reverse();
                 if (this.messages.length > 0) {
                     this.lastMessageTimestamp = this.messages[this.messages.length - 1].ts;
                 }
@@ -1045,7 +1017,7 @@ y1: {
                 if (!response.ok) throw new Error('Failed to fetch messages');
 
                 const data = await response.json();
-                const older = (data.messages || []).reverse();
+                const older = (data.messages || []).map(m => this._normaliseMessage(m, 'api')).reverse();
 
                 if (older.length === 0 || data.count < 100) {
                     this.messagesAllLoaded = true;
@@ -1151,21 +1123,33 @@ y1: {
             }, delay);
         },
 
-        // Normalise a WS new_message payload into the same shape as REST messages
-        _normaliseWsMessage(data) {
+        // Normalise a message (from WS or API) into a consistent shape
+        _normaliseMessage(data, source = 'api') {
+            if (source === 'ws') {
+                return {
+                    ts: data.received_at,
+                    sender: data.sender_name,
+                    text: data.text,
+                    hops: data.path_len != null ? data.path_len : 0,
+                    snr: data.snr,
+                    channel_idx: data.channel_idx,
+                    channel_name: data.channel_name,
+                };
+            }
+            // API source - map API fields to consistent shape
             return {
-                ts: data.received_at,
-                sender: data.sender_name,
+                ts: data.ts,
+                sender: data.sender,
                 text: data.text,
-                hops: data.path_len != null ? data.path_len : 0,
+                hops: data.hops != null ? data.hops : 0,
                 snr: data.snr,
                 channel_idx: data.channel_idx,
-                channel_name: data.channel_name,
+                channel_name: data.channel,
             };
         },
 
         _handleWsMessage(data) {
-            const msg = this._normaliseWsMessage(data);
+            const msg = this._normaliseMessage(data, 'ws');
             const channelName = data.channel_name;
 
             const isCurrentChannel = channelName === this.selectedChannel;
@@ -1180,25 +1164,8 @@ y1: {
                     this.messages = [...this.messages, msg];
                     if (wasAtBottom) this.$nextTick(() => this.scrollToBottom());
                 }
-            } else {
-                // Add to display queue for this channel
-                const updated = { ...this.displayQueue };
-                if (!updated[channelName]) {
-                    updated[channelName] = [];
-                }
-                // Avoid duplicates
-                const alreadyQueued = updated[channelName].some(m => m.ts === msg.ts);
-                if (!alreadyQueued) {
-                    updated[channelName] = [...updated[channelName], msg];
-                }
-                this.displayQueue = updated;
-
-                // Update browser title if tab is hidden
-                if (document.hidden) {
-                    this._hiddenUnread++;
-                    document.title = `(${this._hiddenUnread}) ${this._originalTitle}`;
-                }
             }
+            // For non-selected channels, don't queue messages - they'll be loaded from API when user switches
         },
 
         // ─── End WebSocket ────────────────────────────────────────────────────────
@@ -1260,7 +1227,6 @@ y1: {
             this.updateUrl();
             this.fetchMessages({ forceScrollToBottom: true }).then(() => {
                 this.messagesLoaded = true;
-                this._flushQueueForCurrentChannel();
             });
             this.focusInput();
         },
@@ -1404,16 +1370,14 @@ y1: {
             const msgDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
             const currentYear = now.getFullYear();
             const msgYear = date.getFullYear();
+            const day = date.getDate().toString();
+            const monthAbbr = date.toLocaleDateString('en-US', { month: 'short' }).toLowerCase();
             if (today.getTime() === msgDate.getTime()) {
                 return timeStr;
+            } else if (msgYear === currentYear) {
+                return `${timeStr}, ${day}.${monthAbbr}`;
             } else {
-                const day = date.getDate().toString().padStart(2, '0');
-                const month = (date.getMonth() + 1).toString().padStart(2, '0');
-                if (msgYear === currentYear) {
-                    return `${timeStr} ${day}.${month}`;
-                } else {
-                    return `${timeStr} ${day}.${month}.${msgYear}`;
-                }
+                return `${timeStr}, ${day}.${monthAbbr}.${msgYear}`;
             }
         },
 
@@ -1471,7 +1435,6 @@ y1: {
             this.user = { email: '', username: '', deviceName: '' };
             this.channels = [];
             this.messages = [];
-            this.displayQueue = {};
             this.lastMessageTimestamp = null;
             this.messagesLoaded = false;
             this._hiddenUnread = 0;
