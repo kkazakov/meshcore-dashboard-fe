@@ -442,6 +442,15 @@
                             <span x-text="deleteChannelLoading ? 'Deleting...' : 'Delete'"></span>
                         </button>
                     </div>
+                    <div class="mt-4 flex items-center gap-2">
+                        <input
+                            type="checkbox"
+                            id="softDeleteCheckbox"
+                            x-model="softDeleteChannel"
+                            class="w-4 h-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-600"
+                        >
+                        <label for="softDeleteCheckbox" class="text-sm text-gray-700 dark:text-gray-300">Soft delete (continue storing messages)</label>
+                    </div>
                 </div>
             </div>
 

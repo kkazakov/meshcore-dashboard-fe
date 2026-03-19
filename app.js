@@ -53,6 +53,7 @@ function app() {
         showDeleteChannelModal: false,
         deleteChannelLoading: false,
         deleteChannelTarget: null,
+        softDeleteChannel: false,
         showAddChannelModal: false,
         addChannelLoading: false,
         addChannelError: null,
@@ -1315,6 +1316,7 @@ y1: {
 
         confirmDeleteChannel() {
             this.deleteChannelTarget = this.selectedChannel;
+            this.softDeleteChannel = false;
             this.showDeleteChannelModal = true;
         },
 
@@ -1329,7 +1331,7 @@ y1: {
                         'content-type': 'application/json',
                         'x-api-token': token,
                     },
-                    body: JSON.stringify({ name: this.deleteChannelTarget }),
+                    body: JSON.stringify({ name: this.deleteChannelTarget, soft: this.softDeleteChannel }),
                 });
 
                 if (response.status === 401) {
@@ -1343,6 +1345,7 @@ y1: {
                 this.channels = data.channels || [];
                 this.showDeleteChannelModal = false;
                 this.deleteChannelTarget = null;
+                this.softDeleteChannel = false;
 
                 // Switch to first channel
                 if (this.channels.length > 0) {
