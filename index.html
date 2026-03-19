@@ -236,7 +236,7 @@
                                         <div :class="isMyMessage(msg) 
                                             ? 'w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-white text-sm font-semibold'
                                             : 'w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-white text-sm font-semibold'">
-                                            <span x-text="msg.sender.charAt(0).toUpperCase()"></span>
+                                            <span x-text="getAvatarChar(msg.sender)"></span>
                                         </div>
                                         <span :class="isMyMessage(msg) ? 'font-semibold text-white' : 'font-semibold text-gray-800 dark:text-white'" x-text="msg.sender"></span>
                                         <span :class="isMyMessage(msg) ? 'text-xs text-white/70' : 'text-xs text-gray-500 dark:text-gray-400'" x-text="formatTime(msg.ts)"></span>

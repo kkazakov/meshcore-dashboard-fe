@@ -1440,6 +1440,15 @@ y1: {
             this._hiddenUnread = 0;
             document.title = this._originalTitle;
             window.location.hash = '';
+        },
+
+        getAvatarChar(name) {
+            const emojiRegex = /\p{Emoji}/gu;
+            const matches = name.match(emojiRegex);
+            if (matches && matches.length > 0) {
+                return matches[matches.length - 1];
+            }
+            return name.charAt(0).toUpperCase();
         }
     };
 }
