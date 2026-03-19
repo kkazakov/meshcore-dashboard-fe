@@ -170,11 +170,6 @@
                                 class="w-full text-left px-4 py-3 rounded-lg transition-all duration-200 font-medium flex items-center justify-between"
                             >
                                 <span x-text="channel.name"></span>
-                                <span 
-                                    x-show="_queuedCountForChannel(channel.name) > 0"
-                                    x-text="_queuedCountForChannel(channel.name)"
-                                    class="ml-2 min-w-[1.25rem] h-5 px-1 flex items-center justify-center rounded-full bg-indigo-500 text-white text-xs font-bold leading-none"
-                                ></span>
                             </button>
                         </template>
                     </nav>
@@ -241,13 +236,10 @@
                                         <div :class="isMyMessage(msg) 
                                             ? 'w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-white text-sm font-semibold'
                                             : 'w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-white text-sm font-semibold'">
-                                            <span x-text="msg.sender.charAt(0).toUpperCase()"></span>
+                                            <span x-text="getAvatarChar(msg.sender)"></span>
                                         </div>
                                         <span :class="isMyMessage(msg) ? 'font-semibold text-white' : 'font-semibold text-gray-800 dark:text-white'" x-text="msg.sender"></span>
                                         <span :class="isMyMessage(msg) ? 'text-xs text-white/70' : 'text-xs text-gray-500 dark:text-gray-400'" x-text="formatTime(msg.ts)"></span>
-                                        <span x-show="msg.hops > 0" :class="isMyMessage(msg) 
-                                            ? 'text-xs px-2 py-0.5 rounded-full bg-white/20 text-white' 
-                                            : 'text-xs px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400'" x-text="msg.hops + ' hops'"></span>
                                     </div>
                                     <p :class="isMyMessage(msg) ? 'text-white pl-11' : 'text-gray-700 dark:text-gray-300 pl-11'" x-html="linkifyText(msg.text)"></p>
                                     <template x-for="imgUrl in extractImageUrls(msg.text)" :key="imgUrl">
@@ -264,7 +256,28 @@
                                             </a>
                                         </div>
                                     </template>
-                                    <div x-show="!isMyMessage(msg)" class="flex justify-end mt-1">
+                                    <template x-for="icloudUrl in extractICloudUrls(msg.text)" :key="icloudUrl">
+                                        <div class="pl-11 mt-2">
+                                            <template x-if="icloudImageCache[_icloudShortGuid(icloudUrl)]">
+                                                <a :href="icloudUrl" target="_blank" rel="noopener noreferrer">
+                                                    <img
+                                                        :src="icloudImageCache[_icloudShortGuid(icloudUrl)]"
+                                                        alt="iCloud shared photo"
+                                                        loading="lazy"
+                                                        class="rounded-lg max-w-[300px] max-h-[300px] object-contain cursor-pointer opacity-95 hover:opacity-100 transition-opacity duration-150"
+                                                        @load="_stickToBottom && scrollToBottom()"
+                                                    />
+                                                </a>
+                                            </template>
+                                            <template x-if="icloudImageCache[_icloudShortGuid(icloudUrl)] === undefined">
+                                                <div class="rounded-lg max-w-[300px] h-16 bg-gray-100 dark:bg-gray-700 animate-pulse flex items-center justify-center text-xs text-gray-400 dark:text-gray-500">Loading iCloud photo…</div>
+                                            </template>
+                                        </div>
+                                    </template>
+                                    <div x-show="!isMyMessage(msg)" class="flex justify-between mt-1 gap-2">
+                                        <span x-show="msg.hops > 0" :class="isMyMessage(msg) 
+                                            ? 'text-xs px-2 py-0.5 rounded-full bg-white/20 text-white' 
+                                            : 'text-xs px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400'" x-text="msg.hops + ' hops'"></span>
                                         <button
                                             @click="replyTo(msg.sender)"
                                             class="text-xs text-gray-400 dark:text-gray-500 hover:text-indigo-500 dark:hover:text-indigo-400 transition-colors duration-150"
@@ -441,6 +454,15 @@
                             </svg>
                             <span x-text="deleteChannelLoading ? 'Deleting...' : 'Delete'"></span>
                         </button>
+                    </div>
+                    <div class="mt-4 flex items-center gap-2">
+                        <input
+                            type="checkbox"
+                            id="softDeleteCheckbox"
+                            x-model="softDeleteChannel"
+                            class="w-4 h-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-600"
+                        >
+                        <label for="softDeleteCheckbox" class="text-sm text-gray-700 dark:text-gray-300">Soft delete (continue storing messages)</label>
                     </div>
                 </div>
             </div>

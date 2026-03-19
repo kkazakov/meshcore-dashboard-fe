@@ -23,8 +23,6 @@ function app() {
         messagesLoading: false,
         messagesLoaded: false,
         lastMessageTimestamp: null,
-        // displayQueue: { [channelName]: [ ...messages ] }
-        displayQueue: {},
         wsSocket: null,
         wsReconnectDelay: 1000,
         wsReconnectTimer: null,
@@ -53,6 +51,7 @@ function app() {
         showDeleteChannelModal: false,
         deleteChannelLoading: false,
         deleteChannelTarget: null,
+        softDeleteChannel: false,
         showAddChannelModal: false,
         addChannelLoading: false,
         addChannelError: null,
@@ -67,6 +66,7 @@ function app() {
         _originalTitle: 'Meshcore Dashboard',
         _visibilityHandler: null,
         _stickToBottom: true,
+        icloudImageCache: {}, // shortGUID → blob URL (resolved) | null (failed) | undefined (pending)
 
 
         async init() {
@@ -108,7 +108,6 @@ function app() {
             this._visibilityHandler = () => {
                 this._docHidden = document.hidden;
                 if (!document.hidden) {
-                    this._flushQueueForCurrentChannel();
                     this._hiddenUnread = 0;
                     document.title = this._originalTitle;
                 }
@@ -123,32 +122,9 @@ function app() {
             }
         },
 
-        // Returns the total number of queued (unread) messages across all channels
-        _totalQueuedCount() {
-            return Object.values(this.displayQueue).reduce((sum, arr) => sum + arr.length, 0);
-        },
-
-        // Returns the queued count for a specific channel name
-        _queuedCountForChannel(channelName) {
-            return (this.displayQueue[channelName] || []).length;
-        },
-
         // Flush the display queue for the currently selected channel into visible messages
         _flushQueueForCurrentChannel() {
-            const queued = this.displayQueue[this.selectedChannel];
-            if (!queued || queued.length === 0) return;
-
-            // Filter out messages we already have (by ts)
-            const existingTs = new Set(this.messages.map(m => m.ts));
-            const newOnes = queued.filter(m => !existingTs.has(m.ts));
-            if (newOnes.length > 0) {
-                this.messages = [...this.messages, ...newOnes];
-                this.$nextTick(() => this.scrollToBottom());
-            }
-            // Clear this channel from the queue
-            const updated = { ...this.displayQueue };
-            delete updated[this.selectedChannel];
-            this.displayQueue = updated;
+            // No-op - display queue is no longer used
         },
 
         loadTheme() {
@@ -989,8 +965,6 @@ y1: {
                 this._stopTelemetryRefresh();
                 if (page === 'messages') {
                     this.destroyCharts();
-                    // When switching back to messages, flush the queue for the current channel
-                    this._flushQueueForCurrentChannel();
                 }
             }
         },
@@ -1012,7 +986,9 @@ y1: {
                 if (!response.ok) throw new Error('Failed to fetch messages');
 
                 const data = await response.json();
-                this.messages = (data.messages || []).reverse();
+                this.messages = (data.messages || []).map(m => this._normaliseMessage(m, 'api')).reverse();
+                // Kick off iCloud image resolution for any share.icloud.com links
+                this.messages.forEach(m => this._resolveICloudUrlsInText(m.text));
                 if (this.messages.length > 0) {
                     this.lastMessageTimestamp = this.messages[this.messages.length - 1].ts;
                 }
@@ -1044,7 +1020,9 @@ y1: {
                 if (!response.ok) throw new Error('Failed to fetch messages');
 
                 const data = await response.json();
-                const older = (data.messages || []).reverse();
+                const older = (data.messages || []).map(m => this._normaliseMessage(m, 'api')).reverse();
+                // Kick off iCloud image resolution for any share.icloud.com links
+                older.forEach(m => this._resolveICloudUrlsInText(m.text));
 
                 if (older.length === 0 || data.count < 100) {
                     this.messagesAllLoaded = true;
@@ -1150,21 +1128,33 @@ y1: {
             }, delay);
         },
 
-        // Normalise a WS new_message payload into the same shape as REST messages
-        _normaliseWsMessage(data) {
+        // Normalise a message (from WS or API) into a consistent shape
+        _normaliseMessage(data, source = 'api') {
+            if (source === 'ws') {
+                return {
+                    ts: data.received_at,
+                    sender: data.sender_name,
+                    text: data.text,
+                    hops: data.path_len != null ? data.path_len : 0,
+                    snr: data.snr,
+                    channel_idx: data.channel_idx,
+                    channel_name: data.channel_name,
+                };
+            }
+            // API source - map API fields to consistent shape
             return {
-                ts: data.received_at,
-                sender: data.sender_name,
+                ts: data.ts,
+                sender: data.sender,
                 text: data.text,
-                hops: data.path_len != null ? data.path_len : 0,
+                hops: data.hops != null ? data.hops : 0,
                 snr: data.snr,
                 channel_idx: data.channel_idx,
-                channel_name: data.channel_name,
+                channel_name: data.channel,
             };
         },
 
         _handleWsMessage(data) {
-            const msg = this._normaliseWsMessage(data);
+            const msg = this._normaliseMessage(data, 'ws');
             const channelName = data.channel_name;
 
             const isCurrentChannel = channelName === this.selectedChannel;
@@ -1176,28 +1166,12 @@ y1: {
                 const existingTs = new Set(this.messages.map(m => m.ts));
                 if (!existingTs.has(msg.ts)) {
                     const wasAtBottom = this._isAtBottom();
+                    this._resolveICloudUrlsInText(msg.text);
                     this.messages = [...this.messages, msg];
                     if (wasAtBottom) this.$nextTick(() => this.scrollToBottom());
                 }
-            } else {
-                // Add to display queue for this channel
-                const updated = { ...this.displayQueue };
-                if (!updated[channelName]) {
-                    updated[channelName] = [];
-                }
-                // Avoid duplicates
-                const alreadyQueued = updated[channelName].some(m => m.ts === msg.ts);
-                if (!alreadyQueued) {
-                    updated[channelName] = [...updated[channelName], msg];
-                }
-                this.displayQueue = updated;
-
-                // Update browser title if tab is hidden
-                if (document.hidden) {
-                    this._hiddenUnread++;
-                    document.title = `(${this._hiddenUnread}) ${this._originalTitle}`;
-                }
             }
+            // For non-selected channels, don't queue messages - they'll be loaded from API when user switches
         },
 
         // ─── End WebSocket ────────────────────────────────────────────────────────
@@ -1259,7 +1233,6 @@ y1: {
             this.updateUrl();
             this.fetchMessages({ forceScrollToBottom: true }).then(() => {
                 this.messagesLoaded = true;
-                this._flushQueueForCurrentChannel();
             });
             this.focusInput();
         },
@@ -1315,6 +1288,7 @@ y1: {
 
         confirmDeleteChannel() {
             this.deleteChannelTarget = this.selectedChannel;
+            this.softDeleteChannel = false;
             this.showDeleteChannelModal = true;
         },
 
@@ -1329,7 +1303,7 @@ y1: {
                         'content-type': 'application/json',
                         'x-api-token': token,
                     },
-                    body: JSON.stringify({ name: this.deleteChannelTarget }),
+                    body: JSON.stringify({ name: this.deleteChannelTarget, soft: this.softDeleteChannel }),
                 });
 
                 if (response.status === 401) {
@@ -1343,6 +1317,7 @@ y1: {
                 this.channels = data.channels || [];
                 this.showDeleteChannelModal = false;
                 this.deleteChannelTarget = null;
+                this.softDeleteChannel = false;
 
                 // Switch to first channel
                 if (this.channels.length > 0) {
@@ -1387,15 +1362,29 @@ y1: {
         },
 
         formatTime(ts) {
-            // Append Z if no timezone is present to ensure UTC parsing
             const normalised = (ts && !/[Zz]$/.test(ts) && !/[+-]\d{2}:?\d{2}$/.test(ts))
                 ? ts.replace(' ', 'T') + 'Z'
                 : ts;
-            return new Date(normalised).toLocaleTimeString('en-GB', {
+            const date = new Date(normalised);
+            const timeStr = date.toLocaleTimeString('en-GB', {
                 hour: '2-digit',
                 minute: '2-digit',
                 hour12: false
             });
+            const now = new Date();
+            const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            const msgDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+            const currentYear = now.getFullYear();
+            const msgYear = date.getFullYear();
+            const day = date.getDate().toString();
+            const monthAbbr = date.toLocaleDateString('en-US', { month: 'short' }).toLowerCase();
+            if (today.getTime() === msgDate.getTime()) {
+                return timeStr;
+            } else if (msgYear === currentYear) {
+                return `${timeStr}, ${day}.${monthAbbr}`;
+            } else {
+                return `${timeStr}, ${day}.${monthAbbr}.${msgYear}`;
+            }
         },
 
         linkifyText(text) {
@@ -1415,6 +1404,70 @@ y1: {
         extractImageUrls(text) {
             const matches = text.match(/https:\/\/[^\s<>"]+\.(?:png|jpg|jpeg|gif|webp)(?:\?[^\s<>"]*)?/gi);
             return matches || [];
+        },
+
+        extractICloudUrls(text) {
+            const matches = text.match(/https:\/\/share\.icloud\.com\/photos\/([A-Za-z0-9_-]{10,})/g);
+            return matches || [];
+        },
+
+        _icloudShortGuid(url) {
+            const m = url.match(/https:\/\/share\.icloud\.com\/photos\/([A-Za-z0-9_-]{10,})/);
+            return m ? m[1] : null;
+        },
+
+        async _resolveICloudUrl(shortGuid) {
+            // Return cached result (null = failed, string = blob URL)
+            if (shortGuid in this.icloudImageCache) return this.icloudImageCache[shortGuid];
+
+            // Mark as in-flight with a sentinel so concurrent calls don't double-fetch
+            this.icloudImageCache = { ...this.icloudImageCache, [shortGuid]: undefined };
+
+            try {
+                const resp = await fetch(
+                    'https://ckdatabasews.icloud.com/database/1/com.apple.photos.cloud/production/public/records/resolve',
+                    {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ shortGUIDs: [{ value: shortGuid }] }),
+                    }
+                );
+                if (!resp.ok) throw new Error('CloudKit resolve failed');
+                const json = await resp.json();
+                const result = json.results && json.results[0];
+                const downloadURL = result &&
+                    result.rootRecord &&
+                    result.rootRecord.fields &&
+                    result.rootRecord.fields.previewData &&
+                    result.rootRecord.fields.previewData.value &&
+                    result.rootRecord.fields.previewData.value.downloadURL;
+                if (!downloadURL) throw new Error('No downloadURL in response');
+
+                // Fetch the binary — iCloud prepends a 4-byte header before the JPEG
+                const imgResp = await fetch(downloadURL);
+                if (!imgResp.ok) throw new Error('Image fetch failed');
+                const buffer = await imgResp.arrayBuffer();
+                // Strip the 4-byte iCloud header; JPEG magic (ff d8) starts at byte 4
+                const jpeg = buffer.slice(4);
+                const blob = new Blob([jpeg], { type: 'image/jpeg' });
+                const blobUrl = URL.createObjectURL(blob);
+                this.icloudImageCache = { ...this.icloudImageCache, [shortGuid]: blobUrl };
+                return blobUrl;
+            } catch (e) {
+                console.warn('iCloud image resolve failed for', shortGuid, e);
+                this.icloudImageCache = { ...this.icloudImageCache, [shortGuid]: null };
+                return null;
+            }
+        },
+
+        _resolveICloudUrlsInText(text) {
+            const urls = this.extractICloudUrls(text);
+            for (const url of urls) {
+                const guid = this._icloudShortGuid(url);
+                if (guid && !(guid in this.icloudImageCache)) {
+                    this._resolveICloudUrl(guid);
+                }
+            }
         },
 
         isMyMessage(msg) {
@@ -1452,12 +1505,20 @@ y1: {
             this.user = { email: '', username: '', deviceName: '' };
             this.channels = [];
             this.messages = [];
-            this.displayQueue = {};
             this.lastMessageTimestamp = null;
             this.messagesLoaded = false;
             this._hiddenUnread = 0;
             document.title = this._originalTitle;
             window.location.hash = '';
+        },
+
+        getAvatarChar(name) {
+            const emojiRegex = /\p{Emoji}/gu;
+            const matches = name.match(emojiRegex);
+            if (matches && matches.length > 0) {
+                return matches[matches.length - 1];
+            }
+            return name.charAt(0).toUpperCase();
         }
     };
 }
