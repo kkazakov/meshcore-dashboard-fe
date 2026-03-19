@@ -256,6 +256,24 @@
                                             </a>
                                         </div>
                                     </template>
+                                    <template x-for="icloudUrl in extractICloudUrls(msg.text)" :key="icloudUrl">
+                                        <div class="pl-11 mt-2">
+                                            <template x-if="icloudImageCache[_icloudShortGuid(icloudUrl)]">
+                                                <a :href="icloudUrl" target="_blank" rel="noopener noreferrer">
+                                                    <img
+                                                        :src="icloudImageCache[_icloudShortGuid(icloudUrl)]"
+                                                        alt="iCloud shared photo"
+                                                        loading="lazy"
+                                                        class="rounded-lg max-w-[300px] max-h-[300px] object-contain cursor-pointer opacity-95 hover:opacity-100 transition-opacity duration-150"
+                                                        @load="_stickToBottom && scrollToBottom()"
+                                                    />
+                                                </a>
+                                            </template>
+                                            <template x-if="icloudImageCache[_icloudShortGuid(icloudUrl)] === undefined">
+                                                <div class="rounded-lg max-w-[300px] h-16 bg-gray-100 dark:bg-gray-700 animate-pulse flex items-center justify-center text-xs text-gray-400 dark:text-gray-500">Loading iCloud photo…</div>
+                                            </template>
+                                        </div>
+                                    </template>
                                     <div x-show="!isMyMessage(msg)" class="flex justify-between mt-1 gap-2">
                                         <span x-show="msg.hops > 0" :class="isMyMessage(msg) 
                                             ? 'text-xs px-2 py-0.5 rounded-full bg-white/20 text-white' 

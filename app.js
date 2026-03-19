@@ -66,6 +66,7 @@ function app() {
         _originalTitle: 'Meshcore Dashboard',
         _visibilityHandler: null,
         _stickToBottom: true,
+        icloudImageCache: {}, // shortGUID → blob URL (resolved) | null (failed) | undefined (pending)
 
 
         async init() {
@@ -986,6 +987,8 @@ y1: {
 
                 const data = await response.json();
                 this.messages = (data.messages || []).map(m => this._normaliseMessage(m, 'api')).reverse();
+                // Kick off iCloud image resolution for any share.icloud.com links
+                this.messages.forEach(m => this._resolveICloudUrlsInText(m.text));
                 if (this.messages.length > 0) {
                     this.lastMessageTimestamp = this.messages[this.messages.length - 1].ts;
                 }
@@ -1018,6 +1021,8 @@ y1: {
 
                 const data = await response.json();
                 const older = (data.messages || []).map(m => this._normaliseMessage(m, 'api')).reverse();
+                // Kick off iCloud image resolution for any share.icloud.com links
+                older.forEach(m => this._resolveICloudUrlsInText(m.text));
 
                 if (older.length === 0 || data.count < 100) {
                     this.messagesAllLoaded = true;
@@ -1161,6 +1166,7 @@ y1: {
                 const existingTs = new Set(this.messages.map(m => m.ts));
                 if (!existingTs.has(msg.ts)) {
                     const wasAtBottom = this._isAtBottom();
+                    this._resolveICloudUrlsInText(msg.text);
                     this.messages = [...this.messages, msg];
                     if (wasAtBottom) this.$nextTick(() => this.scrollToBottom());
                 }
@@ -1398,6 +1404,70 @@ y1: {
         extractImageUrls(text) {
             const matches = text.match(/https:\/\/[^\s<>"]+\.(?:png|jpg|jpeg|gif|webp)(?:\?[^\s<>"]*)?/gi);
             return matches || [];
+        },
+
+        extractICloudUrls(text) {
+            const matches = text.match(/https:\/\/share\.icloud\.com\/photos\/([A-Za-z0-9_-]{10,})/g);
+            return matches || [];
+        },
+
+        _icloudShortGuid(url) {
+            const m = url.match(/https:\/\/share\.icloud\.com\/photos\/([A-Za-z0-9_-]{10,})/);
+            return m ? m[1] : null;
+        },
+
+        async _resolveICloudUrl(shortGuid) {
+            // Return cached result (null = failed, string = blob URL)
+            if (shortGuid in this.icloudImageCache) return this.icloudImageCache[shortGuid];
+
+            // Mark as in-flight with a sentinel so concurrent calls don't double-fetch
+            this.icloudImageCache = { ...this.icloudImageCache, [shortGuid]: undefined };
+
+            try {
+                const resp = await fetch(
+                    'https://ckdatabasews.icloud.com/database/1/com.apple.photos.cloud/production/public/records/resolve',
+                    {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ shortGUIDs: [{ value: shortGuid }] }),
+                    }
+                );
+                if (!resp.ok) throw new Error('CloudKit resolve failed');
+                const json = await resp.json();
+                const result = json.results && json.results[0];
+                const downloadURL = result &&
+                    result.rootRecord &&
+                    result.rootRecord.fields &&
+                    result.rootRecord.fields.previewData &&
+                    result.rootRecord.fields.previewData.value &&
+                    result.rootRecord.fields.previewData.value.downloadURL;
+                if (!downloadURL) throw new Error('No downloadURL in response');
+
+                // Fetch the binary — iCloud prepends a 4-byte header before the JPEG
+                const imgResp = await fetch(downloadURL);
+                if (!imgResp.ok) throw new Error('Image fetch failed');
+                const buffer = await imgResp.arrayBuffer();
+                // Strip the 4-byte iCloud header; JPEG magic (ff d8) starts at byte 4
+                const jpeg = buffer.slice(4);
+                const blob = new Blob([jpeg], { type: 'image/jpeg' });
+                const blobUrl = URL.createObjectURL(blob);
+                this.icloudImageCache = { ...this.icloudImageCache, [shortGuid]: blobUrl };
+                return blobUrl;
+            } catch (e) {
+                console.warn('iCloud image resolve failed for', shortGuid, e);
+                this.icloudImageCache = { ...this.icloudImageCache, [shortGuid]: null };
+                return null;
+            }
+        },
+
+        _resolveICloudUrlsInText(text) {
+            const urls = this.extractICloudUrls(text);
+            for (const url of urls) {
+                const guid = this._icloudShortGuid(url);
+                if (guid && !(guid in this.icloudImageCache)) {
+                    this._resolveICloudUrl(guid);
+                }
+            }
         },
 
         isMyMessage(msg) {
