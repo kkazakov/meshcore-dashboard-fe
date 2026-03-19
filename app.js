@@ -36,6 +36,8 @@ function app() {
         currentPage: 'channels',
         moreSubPage: 'telemetry',
         repeaters: [],
+        messageLinks: [],
+        messageLinksLoading: false,
         repeatersLoading: false,
         repeaterCharts: {},
         showAddRepeaterModal: false,
@@ -962,6 +964,8 @@ y1: {
             } else if (page === 'more' && this.moreSubPage === 'telemetry' && this.repeaters.length > 0) {
                 this.$nextTick(() => this.renderCharts());
                 this._startTelemetryRefresh();
+            } else if (page === 'more' && this.moreSubPage === 'links' && this.messageLinks.length === 0) {
+                this.fetchMessageLinks();
             } else {
                 this._stopTelemetryRefresh();
                 if (page === 'channels') {
@@ -977,9 +981,50 @@ y1: {
             } else if (subPage === 'telemetry' && this.repeaters.length > 0) {
                 this.$nextTick(() => this.renderCharts());
                 this._startTelemetryRefresh();
+            } else if (subPage === 'links' && this.messageLinks.length === 0) {
+                this.fetchMessageLinks();
             } else {
                 this._stopTelemetryRefresh();
                 this.destroyCharts();
+            }
+        },
+        
+        async fetchMessageLinks() {
+            this.messageLinksLoading = true;
+            const token = localStorage.getItem('api_token') || '0bd71fdbcefca62bfca7941ccd43d5437f3b04f82884cd1be3a6ad4e0941038d';
+            
+            try {
+                const response = await fetch(
+                    'https://meshcore-dashboard-api.drun.net/api/message-links?from=0&limit=1000',
+                    {
+                        headers: { 'x-api-token': token }
+                    }
+                );
+                
+                if (response.status === 401) {
+                    this.handleUnauthorized();
+                    return;
+                }
+
+                if (!response.ok) {
+                    throw new Error('Failed to fetch message links: ' + response.statusText);
+                }
+
+                const data = await response.json();
+                const links = (data.links || []).reverse();
+                this.messageLinks.splice(0, this.messageLinks.length, ...links);
+                this.$nextTick(() => this.scrollToLinksBottom());
+            } catch (err) {
+                console.error('fetchMessageLinks error:', err);
+            } finally {
+                this.messageLinksLoading = false;
+            }
+        },
+
+        scrollToLinksBottom() {
+            const el = this.$refs.linksBottom;
+            if (el) {
+                el.scrollIntoView();
             }
         },
 
@@ -1373,6 +1418,10 @@ y1: {
 
         onMessagesScroll(e) {
             this._stickToBottom = this._isAtBottom();
+        },
+
+        onLinksScroll(e) {
+            // No-op for now, can be extended if needed
         },
 
         formatTime(ts) {
