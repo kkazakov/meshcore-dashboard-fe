@@ -92,31 +92,40 @@
                     <h1 class="text-2xl font-bold bg-gradient-to-r from-indigo-500 to-purple-600 bg-clip-text text-transparent">Meshcore Dashboard</h1>
                     <nav class="flex gap-1 bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
                         <button 
-                            @click="switchPage('messages')"
-                            :class="currentPage === 'messages' 
+                            @click="switchPage('channels')"
+                            :class="currentPage === 'channels' 
                                 ? 'bg-white dark:bg-gray-600 text-indigo-600 dark:text-indigo-400 shadow-sm' 
                                 : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'"
                             class="px-4 py-2 rounded-md text-sm font-medium transition-all duration-200"
                         >
-                            Messages
+                            Channels
                         </button>
                         <button 
-                            @click="switchPage('telemetry')"
-                            :class="currentPage === 'telemetry' 
+                            @click="switchPage('chats')"
+                            :class="currentPage === 'chats' 
                                 ? 'bg-white dark:bg-gray-600 text-indigo-600 dark:text-indigo-400 shadow-sm' 
                                 : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'"
                             class="px-4 py-2 rounded-md text-sm font-medium transition-all duration-200"
                         >
-                            Telemetry
+                            Chats
                         </button>
                         <button 
-                            @click="switchPage('configuration')"
-                            :class="currentPage === 'configuration' 
+                            @click="switchPage('more')"
+                            :class="currentPage === 'more' 
                                 ? 'bg-white dark:bg-gray-600 text-indigo-600 dark:text-indigo-400 shadow-sm' 
                                 : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'"
                             class="px-4 py-2 rounded-md text-sm font-medium transition-all duration-200"
                         >
-                            Configuration
+                            More
+                        </button>
+                        <button 
+                            @click="switchPage('settings')"
+                            :class="currentPage === 'settings' 
+                                ? 'bg-white dark:bg-gray-600 text-indigo-600 dark:text-indigo-400 shadow-sm' 
+                                : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'"
+                            class="px-4 py-2 rounded-md text-sm font-medium transition-all duration-200"
+                        >
+                            Settings
                         </button>
                     </nav>
                 </div>
@@ -147,8 +156,8 @@
 
         <!-- Main Content -->
         <main class="flex-1 min-h-0 flex overflow-hidden">
-            <!-- Messages Page -->
-            <div x-show="currentPage === 'messages'" class="contents">
+            <!-- Channels Page -->
+            <div x-show="currentPage === 'channels'" class="contents">
                 <!-- Sidebar -->
                 <aside class="w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col transition-colors">
                     <div class="p-4 border-b border-gray-200 dark:border-gray-700">
@@ -467,32 +476,60 @@
                 </div>
             </div>
 
-            <!-- Telemetry Page -->
-            <div x-show="currentPage === 'telemetry'" class="flex-1 flex flex-col min-h-0 bg-gray-50 dark:bg-gray-900 transition-colors">
-                <div class="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4 transition-colors flex items-center justify-between">
-                    <h3 class="text-lg font-semibold text-gray-800 dark:text-white">Repeater Telemetry</h3>
-                    <div class="flex items-center gap-2">
-                        <button
-                            @click="pollRepeaters()"
-                            :disabled="_polling"
-                            class="flex items-center gap-2 px-3 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
-                        >
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" :class="{ 'animate-spin': _polling }" viewBox="0 0 20 20" fill="currentColor">
-                                <path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd"/>
-                            </svg>
-                            Force check
-                        </button>
-                        <button
-                            @click="showAddRepeaterModal = true"
-                            class="flex items-center gap-2 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg transition-colors"
-                        >
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                                <path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd"/>
-                            </svg>
-                            Add Repeater
-                        </button>
+            <!-- More Page (with sub-tabs) -->
+            <div x-show="currentPage === 'more'" class="flex-1 flex flex-col min-h-0 bg-gray-50 dark:bg-gray-900 transition-colors">
+                <div class="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4 transition-colors">
+                    <div class="flex items-center justify-between">
+                        <h3 class="text-lg font-semibold text-gray-800 dark:text-white">More</h3>
+                        <nav class="flex gap-1 bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
+                            <button 
+                                @click="switchSubPage('telemetry')"
+                                :class="moreSubPage === 'telemetry' 
+                                    ? 'bg-white dark:bg-gray-600 text-indigo-600 dark:text-indigo-400 shadow-sm' 
+                                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'"
+                                class="px-4 py-2 rounded-md text-sm font-medium transition-all duration-200"
+                            >
+                                Telemetry
+                            </button>
+                            <button 
+                                @click="switchSubPage('links')"
+                                :class="moreSubPage === 'links' 
+                                    ? 'bg-white dark:bg-gray-600 text-indigo-600 dark:text-indigo-400 shadow-sm' 
+                                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'"
+                                class="px-4 py-2 rounded-md text-sm font-medium transition-all duration-200"
+                            >
+                                Links
+                            </button>
+                        </nav>
                     </div>
                 </div>
+                
+                <!-- Telemetry sub-page -->
+                <div x-show="moreSubPage === 'telemetry'" class="flex-1 flex flex-col min-h-0 overflow-hidden">
+                    <div class="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4 transition-colors flex items-center justify-between">
+                        <h4 class="text-md font-semibold text-gray-800 dark:text-white">Repeater Telemetry</h4>
+                        <div class="flex items-center gap-2">
+                            <button
+                                @click="pollRepeaters()"
+                                :disabled="_polling"
+                                class="flex items-center gap-2 px-3 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" :class="{ 'animate-spin': _polling }" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd"/>
+                                </svg>
+                                Force check
+                            </button>
+                            <button
+                                @click="showAddRepeaterModal = true"
+                                class="flex items-center gap-2 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg transition-colors"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd"/>
+                                </svg>
+                                Add Repeater
+                            </button>
+                        </div>
+                    </div>
 
                 <!-- Poll message banner -->
                 <div
@@ -861,17 +898,36 @@
                         </template>
                     </div>
                 </div>
+                
+                <!-- Links sub-page -->
+                <div x-show="moreSubPage === 'links'" class="flex-1 overflow-y-auto p-6">
+                    <div class="text-center py-12 text-gray-500 dark:text-gray-400">
+                        Coming soon
+                    </div>
+                </div>
             </div>
 
-            <!-- Configuration Page -->
-            <div x-show="currentPage === 'configuration'" class="flex-1 flex flex-col min-h-0 bg-gray-50 dark:bg-gray-900 transition-colors">
+            <!-- Chats Page (empty) -->
+            <div x-show="currentPage === 'chats'" class="flex-1 flex flex-col min-h-0 bg-gray-50 dark:bg-gray-900 transition-colors">
                 <div class="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4 transition-colors">
-                    <h3 class="text-lg font-semibold text-gray-800 dark:text-white">Configuration</h3>
+                    <h3 class="text-lg font-semibold text-gray-800 dark:text-white">Chats</h3>
+                </div>
+                <div class="flex-1 overflow-y-auto p-6">
+                    <div class="text-center py-12 text-gray-500 dark:text-gray-400">
+                        Coming soon
+                    </div>
+                </div>
+            </div>
+
+            <!-- Settings Page -->
+            <div x-show="currentPage === 'settings'" class="flex-1 flex flex-col min-h-0 bg-gray-50 dark:bg-gray-900 transition-colors">
+                <div class="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4 transition-colors">
+                    <h3 class="text-lg font-semibold text-gray-800 dark:text-white">Settings</h3>
                 </div>
             </div>
         </main>
     </div>
 
-    <script src="app.js?v=3"></script>
+    <script src="app.js?v=4"></script>
 </body>
 </html>

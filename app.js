@@ -33,7 +33,8 @@ function app() {
         messagesLoadingMore: false,
         messagesAllLoaded: false,
         darkMode: false,
-        currentPage: 'messages',
+        currentPage: 'channels',
+        moreSubPage: 'telemetry',
         repeaters: [],
         repeatersLoading: false,
         repeaterCharts: {},
@@ -148,7 +149,7 @@ function app() {
             this.darkMode = !this.darkMode;
             localStorage.setItem('darkMode', this.darkMode);
             this.applyTheme();
-            if (this.currentPage === 'telemetry' && this.repeaters.length > 0) {
+            if (this.currentPage === 'more' && this.moreSubPage === 'telemetry' && this.repeaters.length > 0) {
                 this.$nextTick(() => this.renderCharts());
             }
         },
@@ -156,12 +157,12 @@ function app() {
         loadChannelFromUrl() {
             const hash = window.location.hash;
             // Check for tab anchors first
-            if (hash === '#telemetry') {
-                this.switchPage('telemetry');
+            if (hash === '#more') {
+                this.switchPage('more');
                 return;
             }
-            if (hash === '#configuration') {
-                this.switchPage('configuration');
+            if (hash === '#settings') {
+                this.switchPage('settings');
                 return;
             }
             // Fall back to channel anchor for the messages tab
@@ -950,22 +951,35 @@ y1: {
         switchPage(page) {
             this.currentPage = page;
             // Update URL anchor to reflect the active tab
-            if (page === 'messages') {
-                // Restore the channel anchor for the messages tab
+            if (page === 'channels') {
+                // Restore the channel anchor for the channels tab
                 this.updateUrl();
             } else {
                 window.location.hash = page;
             }
-            if (page === 'telemetry' && this.repeaters.length === 0) {
+            if (page === 'more' && this.moreSubPage === 'telemetry' && this.repeaters.length === 0) {
                 this.fetchRepeaters().then(() => this._startTelemetryRefresh());
-            } else if (page === 'telemetry' && this.repeaters.length > 0) {
+            } else if (page === 'more' && this.moreSubPage === 'telemetry' && this.repeaters.length > 0) {
                 this.$nextTick(() => this.renderCharts());
                 this._startTelemetryRefresh();
             } else {
                 this._stopTelemetryRefresh();
-                if (page === 'messages') {
+                if (page === 'channels') {
                     this.destroyCharts();
                 }
+            }
+        },
+        
+        switchSubPage(subPage) {
+            this.moreSubPage = subPage;
+            if (subPage === 'telemetry' && this.repeaters.length === 0) {
+                this.fetchRepeaters().then(() => this._startTelemetryRefresh());
+            } else if (subPage === 'telemetry' && this.repeaters.length > 0) {
+                this.$nextTick(() => this.renderCharts());
+                this._startTelemetryRefresh();
+            } else {
+                this._stopTelemetryRefresh();
+                this.destroyCharts();
             }
         },
 
@@ -1158,7 +1172,7 @@ y1: {
             const channelName = data.channel_name;
 
             const isCurrentChannel = channelName === this.selectedChannel;
-            const isMessagesPage = this.currentPage === 'messages';
+            const isMessagesPage = this.currentPage === 'channels';
             const isVisible = !document.hidden;
 
             if (isCurrentChannel && isMessagesPage && isVisible) {
