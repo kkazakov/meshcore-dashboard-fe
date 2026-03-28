@@ -10,8 +10,11 @@ if [ -z "${WS_ENDPOINT}" ]; then
     echo "WS_ENDPOINT not set in .env, derived: ${WS_ENDPOINT}"
 fi
 
+npm run build:css
+
 mkdir -p /tmp/meshcore-dashboard
 cp index.html /tmp/meshcore-dashboard/
+cp styles.css /tmp/meshcore-dashboard/
 sed "s|const API_BASE = 'http://127.0.0.1:8000';|const API_BASE = '${API_ENDPOINT}';|g" app.js | \
     sed "s|const WS_BASE = 'ws://127.0.0.1:8000';|const WS_BASE = '${WS_ENDPOINT}';|g" > /tmp/meshcore-dashboard/app.js
 

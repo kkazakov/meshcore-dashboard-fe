@@ -1,0 +1,29 @@
+{
+  "name": "meshcore-dashboard-fe",
+  "version": "1.0.0",
+  "description": "A lightweight web frontend for the [Meshcore Dashboard API](https://github.com/kkazakov/meshcore-dashboard-api). Displays real-time messages from a MeshCore LoRa mesh network, repeater telemetry, and battery status.",
+  "main": "app.js",
+  "scripts": {
+    "build:css": "tailwindcss -i ./src/input.css -o ./styles.css --minify",
+    "watch:css": "tailwindcss -i ./src/input.css -o ./styles.css --watch",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kkazakov/meshcore-dashboard-fe.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/kkazakov/meshcore-dashboard-fe/issues"
+  },
+  "homepage": "https://github.com/kkazakov/meshcore-dashboard-fe#readme",
+  "dependencies": {
+    "tailwindcss": "^4.2.2"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.2.2"
+  }
+}
