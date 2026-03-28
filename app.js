@@ -1111,6 +1111,10 @@ y1: {
             const token = localStorage.getItem('api_token');
             if (!token) return;
 
+            // If a socket is still mid-handshake, don't tear it down and restart —
+            // that's what causes "WebSocket closed before connection established".
+            if (this.wsSocket && this.wsSocket.readyState === WebSocket.CONNECTING) return;
+
             // Clean up any existing socket
             this.disconnectWebSocket(false);
 
@@ -1167,7 +1171,11 @@ y1: {
                 // Remove handlers to avoid triggering reconnect on intentional close
                 this.wsSocket.onclose = null;
                 this.wsSocket.onerror = null;
-                this.wsSocket.close();
+                // Only close if not already closing/closed
+                if (this.wsSocket.readyState !== WebSocket.CLOSING &&
+                    this.wsSocket.readyState !== WebSocket.CLOSED) {
+                    this.wsSocket.close();
+                }
                 this.wsSocket = null;
             }
             this.wsAuthenticated = false;
