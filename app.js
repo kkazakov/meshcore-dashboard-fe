@@ -1124,54 +1124,41 @@ y1: {
             this.wsAuthenticated = false;
 
             ws.onopen = () => {
-                console.log('[WS] connected, sending auth');
                 ws.send(JSON.stringify({ type: 'auth', token }));
             };
 
             ws.onmessage = (event) => {
-                console.debug('[WS] raw message received:', event.data);
                 let message;
                 try {
                     message = JSON.parse(event.data);
                 } catch {
-                    console.warn('[WS] failed to parse message as JSON:', event.data);
                     return;
                 }
 
                 const msgType = (message.type || '').trim();
-                console.debug('[WS] parsed type:', msgType, message);
 
                 if (msgType === 'welcome') {
-                    console.log('[WS] authenticated (welcome received)');
                     this.wsReconnectDelay = 1000;
                     this.wsAuthenticated = true;
                     return;
                 }
 
                 if (msgType === 'ping') {
-                    console.debug('[WS] ping received');
                     return;
                 }
 
                 if (msgType === 'new_message' && message.data) {
-                    console.log('[WS] new_message received:', message.data);
                     this._handleWsMessage(message.data);
-                } else if (msgType === 'new_message') {
-                    console.warn('[WS] new_message received but data field is missing:', message);
-                } else {
-                    console.warn('[WS] unhandled message type:', msgType, message);
                 }
             };
 
             ws.onclose = (event) => {
-                console.warn('[WS] connection closed:', { code: event.code, reason: event.reason, wasClean: event.wasClean });
                 this.wsAuthenticated = false;
                 this.wsSocket = null;
                 this._scheduleReconnect();
             };
 
-            ws.onerror = (event) => {
-                console.error('[WS] error:', event);
+            ws.onerror = () => {
                 // onclose will fire after onerror — reconnect logic lives there
             };
         },
@@ -1242,26 +1229,14 @@ y1: {
             const isMessagesPage = this.currentPage === 'channels';
             const isTabVisible = !document.hidden;
 
-            console.debug('[WS] _handleWsMessage:', {
-                channelName,
-                selectedChannel: this.selectedChannel,
-                isCurrentChannel,
-                isMessagesPage,
-                isTabVisible,
-                msg,
-            });
-
             // Always try to append if this is the active channel (regardless of tab visibility)
             if (isCurrentChannel && isMessagesPage) {
                 const existingTs = new Set(this.messages.map(m => m.ts));
                 if (!existingTs.has(msg.ts)) {
-                    console.log('[WS] appending message to view:', msg);
                     const wasAtBottom = this._isAtBottom();
                     this._resolveICloudUrlsInText(msg.text);
                     this.messages = [...this.messages, msg];
                     if (wasAtBottom) this.$nextTick(() => this.scrollToBottom());
-                } else {
-                    console.warn('[WS] duplicate message (same ts), dropping:', msg.ts);
                 }
 
                 // Increment title unread counter when tab is hidden
@@ -1271,7 +1246,6 @@ y1: {
                 }
             } else {
                 // Message is for a different channel or user is on another page — mark it unread
-                console.log('[WS] message not shown, marking channel unread:', channelName);
                 this.unreadChannels = {
                     ...this.unreadChannels,
                     [channelName]: (this.unreadChannels[channelName] || 0) + 1,
