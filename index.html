@@ -166,6 +166,11 @@
                                 class="w-full text-left px-4 py-3 rounded-lg transition-all duration-200 font-medium flex items-center justify-between"
                             >
                                 <span x-text="channel.name"></span>
+                                <span
+                                    x-show="unreadChannels[channel.name]"
+                                    x-text="unreadChannels[channel.name]"
+                                    class="ml-auto min-w-[1.25rem] h-5 px-1 rounded-full bg-indigo-500 text-white text-xs font-bold flex items-center justify-center leading-none"
+                                ></span>
                             </button>
                         </template>
                     </nav>

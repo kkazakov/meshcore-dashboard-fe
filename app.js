@@ -69,6 +69,7 @@ function app() {
         _originalTitle: 'Meshcore Dashboard',
         _visibilityHandler: null,
         _stickToBottom: true,
+        unreadChannels: {}, // channel_name → unread count
         icloudImageCache: {}, // shortGUID → blob URL (resolved) | null (failed) | undefined (pending)
 
 
@@ -1239,19 +1240,19 @@ y1: {
 
             const isCurrentChannel = channelName === this.selectedChannel;
             const isMessagesPage = this.currentPage === 'channels';
-            const isVisible = !document.hidden;
+            const isTabVisible = !document.hidden;
 
             console.debug('[WS] _handleWsMessage:', {
                 channelName,
                 selectedChannel: this.selectedChannel,
                 isCurrentChannel,
                 isMessagesPage,
-                isVisible,
+                isTabVisible,
                 msg,
             });
 
-            if (isCurrentChannel && isMessagesPage && isVisible) {
-                // Message is immediately visible — append directly
+            // Always try to append if this is the active channel (regardless of tab visibility)
+            if (isCurrentChannel && isMessagesPage) {
                 const existingTs = new Set(this.messages.map(m => m.ts));
                 if (!existingTs.has(msg.ts)) {
                     console.log('[WS] appending message to view:', msg);
@@ -1262,10 +1263,26 @@ y1: {
                 } else {
                     console.warn('[WS] duplicate message (same ts), dropping:', msg.ts);
                 }
+
+                // Increment title unread counter when tab is hidden
+                if (!isTabVisible) {
+                    this._hiddenUnread++;
+                    document.title = `(${this._hiddenUnread}) ${this._originalTitle}`;
+                }
             } else {
-                console.log('[WS] message not shown (conditions not met):', { isCurrentChannel, isMessagesPage, isVisible });
+                // Message is for a different channel or user is on another page — mark it unread
+                console.log('[WS] message not shown, marking channel unread:', channelName);
+                this.unreadChannels = {
+                    ...this.unreadChannels,
+                    [channelName]: (this.unreadChannels[channelName] || 0) + 1,
+                };
+
+                // Also bump the title counter if tab is hidden
+                if (!isTabVisible) {
+                    this._hiddenUnread++;
+                    document.title = `(${this._hiddenUnread}) ${this._originalTitle}`;
+                }
             }
-            // For non-selected channels, don't queue messages - they'll be loaded from API when user switches
         },
 
         // ─── End WebSocket ────────────────────────────────────────────────────────
@@ -1319,6 +1336,12 @@ y1: {
         selectChannel(index, name) {
             this.selectedChannelIndex = index;
             this.selectedChannel = name;
+            // Clear unread badge for this channel
+            if (this.unreadChannels[name]) {
+                const updated = { ...this.unreadChannels };
+                delete updated[name];
+                this.unreadChannels = updated;
+            }
             this.messages = [];
             this.lastMessageTimestamp = null;
             this.messagesLoaded = false;
